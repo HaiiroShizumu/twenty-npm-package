@@ -16,6 +16,8 @@ export const restNeq = (field: string, value: string): string =>
 
 export const restIsNull = (field: string): string => `${field}[is]:NULL`;
 
+export const restIsNotNull = (field: string): string => `${field}[is]:NOT_NULL`;
+
 export const restLt = (field: string, value: string): string =>
   `${field}[lt]:${quote(value)}`;
 

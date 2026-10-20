@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { defineFrontComponent } from 'twenty-sdk/define';
-import { enqueueSnackbar } from 'twenty-sdk/front-component';
+import { AppPath, enqueueSnackbar, openSidePanelPage } from 'twenty-sdk/front-component';
 import { Button } from 'twenty-ui/primitives/input';
 import { Tag } from 'twenty-ui/primitives/data-display';
 import { useTheme } from 'twenty-ui/theme';
@@ -27,6 +27,7 @@ import {
   restAnd,
   restEq,
   restIlike,
+  restIsNotNull,
   restIsNull,
   restLt,
   restNeq,
@@ -37,7 +38,7 @@ import { type FormField } from 'src/shared/form/form-field.type';
 import { getFormFieldsError } from 'src/shared/form/form-fields.util';
 import { TASKS_FRONT_COMPONENT_UNIVERSAL_IDENTIFIER } from 'src/universal-identifiers';
 
-type TaskFilter = 'open' | 'mine' | 'overdue' | 'done';
+type TaskFilter = 'open' | 'mine' | 'overdue' | 'done' | 'archived';
 type TaskSort = 'newest' | 'oldest' | 'dueSoon' | 'nameAsc';
 type Panel = { kind: 'closed' } | { kind: 'create' } | { kind: 'task'; taskId: string };
 
@@ -52,6 +53,15 @@ const ORDER_BY: Record<TaskSort, string> = {
 };
 
 const OPEN_FILTER = restOr(restNeq('status', TASK_DONE_STATUS), restIsNull('status'));
+
+// An archived task opens in its standard card: Twenty shows it as deleted
+// there and offers to restore it.
+const openArchivedTask = (taskId: string) =>
+  openSidePanelPage({
+    to: AppPath.RecordShowPage,
+    params: { objectNameSingular: 'task', objectRecordId: taskId },
+    pageTitle: 'Задание',
+  });
 
 // The list is filtered by the server, so a long history of tasks never
 // travels to the browser.
@@ -68,7 +78,12 @@ const buildFilter = ({
 }) =>
   restAnd(
     restEq('smbSection', DOCFLOW_SECTION),
-    taskFilter === 'done' ? restEq('status', TASK_DONE_STATUS) : OPEN_FILTER,
+    // Archived = deleted in Twenty (kept in its trash): any status
+    taskFilter === 'archived'
+      ? restIsNotNull('deletedAt')
+      : taskFilter === 'done'
+        ? restEq('status', TASK_DONE_STATUS)
+        : OPEN_FILTER,
     taskFilter === 'mine'
       ? currentMemberId !== undefined
         ? restEq('assigneeId', currentMemberId)
@@ -224,6 +239,7 @@ const DocflowTasks = () => {
               { value: 'mine', label: 'Мои' },
               { value: 'overdue', label: 'Просроченные' },
               { value: 'done', label: 'Выполненные' },
+              { value: 'archived', label: 'Архив' },
             ]}
             onChange={(value) => {
               setTaskFilter(value);
@@ -263,7 +279,11 @@ const DocflowTasks = () => {
               { key: 'status', label: 'Статус' },
             ]}
             selectedRowId={panel.kind === 'task' ? panel.taskId : undefined}
-            onRowClick={(taskId) => setPanel({ kind: 'task', taskId })}
+            onRowClick={(taskId) =>
+              taskFilter === 'archived'
+                ? void openArchivedTask(taskId)
+                : setPanel({ kind: 'task', taskId })
+            }
             rows={tasks.map((task) => ({
               id: task.id,
               cells: {
