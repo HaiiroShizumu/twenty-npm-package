@@ -31,7 +31,7 @@ const membership = {
   memberKey: 'c1:m1',
   conversationId: 'c1',
   workspaceMemberId: 'm1',
-  role: 'MEMBER',
+  memberRole: 'MEMBER',
   lastReadSeq: 3,
   mutedUntil: null,
 };
