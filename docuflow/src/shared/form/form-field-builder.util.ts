@@ -120,3 +120,13 @@ export const buildFieldsOutputSchema = (fields: FormField[]): Record<string, unk
           },
     ]),
   );
+
+// A sample request body with these fields, as the workflow editor keeps it for
+// a webhook trigger ("expected body"); the variables come from the schema above.
+export const buildFieldsExpectedBody = (fields: FormField[]): Record<string, unknown> =>
+  Object.fromEntries(
+    getFillableFormFields(fields).map((field) => [
+      field.name,
+      field.type === 'RECORD' ? { id: '' } : field.type === 'NUMBER' ? 0 : '',
+    ]),
+  );

@@ -19,11 +19,11 @@ import {
 } from 'src/front/ui/components';
 import { FormFieldsBuilder } from 'src/front/ui/form-fields-builder';
 import { restAnd, restEq } from 'src/shared/api/rest-filter.util';
-import { LAUNCH_PARAMETERS_STEP_NAME } from 'src/shared/docflow.constants';
+import { LAUNCH_TRIGGER_NAME, TRIGGER_STEP_ID } from 'src/shared/docflow.constants';
 import { type FormField } from 'src/shared/form/form-field.type';
 import { getFillableFormFields, getFormFieldsError, parseFormFields } from 'src/shared/form/form-fields.util';
 import { readStepSettings, type StepSettings } from 'src/shared/form/step-settings.util';
-import { findLaunchParametersStep, parseLaunchFields } from 'src/shared/workflow/launch-step.util';
+import { parseLaunchFields } from 'src/shared/workflow/launch-step.util';
 import { type WorkflowStep } from 'src/shared/workflow/workflow-run.type';
 import { getFormStepFields, isFormStep } from 'src/shared/workflow/workflow-run.util';
 import { logDocflow, logDocflowError } from 'src/shared/log.util';
@@ -39,12 +39,10 @@ const sectionStyle = { display: 'flex', flexDirection: 'column' as const };
 const LaunchParametersEditor = ({
   workflowId,
   initialFields,
-  launchStepId,
   onSaved,
 }: {
   workflowId: string;
   initialFields: FormField[];
-  launchStepId: string | undefined;
   onSaved: () => void;
 }) => {
   const theme = useTheme();
@@ -72,7 +70,7 @@ const LaunchParametersEditor = ({
       await enqueueSnackbar({
         message:
           fields.length > 0
-            ? `Параметры сохранены: шаг «${LAUNCH_PARAMETERS_STEP_NAME}» стоит в черновике после запуска, опубликуйте процесс`
+            ? `Параметры сохранены: процесс начинается с «${LAUNCH_TRIGGER_NAME}», опубликуйте его`
             : 'Параметры убраны',
         variant: 'success',
       });
@@ -86,17 +84,17 @@ const LaunchParametersEditor = ({
   };
 
   return (
-    <section style={{ ...sectionStyle, gap: theme.spacing[2] }} aria-label={LAUNCH_PARAMETERS_STEP_NAME}>
-      <SectionTitle>{LAUNCH_PARAMETERS_STEP_NAME}</SectionTitle>
+    <section style={{ ...sectionStyle, gap: theme.spacing[2] }} aria-label="Параметры запуска">
+      <SectionTitle>Параметры запуска</SectionTitle>
       <Message tone="hint">
-        Что человек заполняет перед запуском. Шаг «{LAUNCH_PARAMETERS_STEP_NAME}» встаёт после
-        «Запуск вручную» сам: в следующих шагах значения выбираются в списке переменных этого шага,
-        например сотрудник — в поле «Исполнитель».
+        Что человек заполняет перед запуском. Первым блоком процесса становится «{LAUNCH_TRIGGER_NAME}»:
+        в следующих шагах значения выбираются как его переменные, например сотрудник — в поле
+        «Исполнитель». Без параметров процесс начинается с обычного «Запуск вручную».
       </Message>
       <FormFieldsBuilder
         fields={fields}
         onChange={setFields}
-        variablePrefix={launchStepId}
+        variablePrefix={TRIGGER_STEP_ID}
         disabled={isSaving}
       />
       {errorMessage !== undefined && <Message tone="danger">{errorMessage}</Message>}
@@ -261,7 +259,6 @@ const ProcessSteps = () => {
             key={`${workflowId}:${launchEditorKey}`}
             workflowId={workflowId}
             initialFields={parseLaunchFields(data.process.smbLaunchFields)}
-            launchStepId={findLaunchParametersStep(draft?.steps)?.id}
             onSaved={() => {
               void reload().then(() => setLaunchEditorKey((current) => current + 1));
             }}

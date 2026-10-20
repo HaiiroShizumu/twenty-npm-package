@@ -1,4 +1,5 @@
 import { FORM_FIELD_DUE_IN_DAYS_SETTING } from 'src/shared/docflow.constants';
+import { isLaunchableTrigger } from 'src/shared/workflow/launch-step.util';
 import { type FormField } from 'src/shared/form/form-field.type';
 import {
   getFillableFormFields,
@@ -131,7 +132,7 @@ export const getFormStepTaskRequests = ({
 }): FormStepTaskRequest[] => {
   const steps = state?.flow?.steps ?? [];
   const stepInfos = state?.stepInfos ?? {};
-  const isStartedByHand = state?.flow?.trigger?.type === 'MANUAL';
+  const isStartedByHand = isLaunchableTrigger(state?.flow?.trigger);
 
   return steps.flatMap((step) => {
     const stepInfo = stepInfos[step.id];

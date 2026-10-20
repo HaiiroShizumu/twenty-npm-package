@@ -1,29 +1,25 @@
-import { MetadataApiClient } from 'twenty-client-sdk/metadata';
-
 import {
   callCoreGraphql,
   CREATE_DRAFT_FROM_WORKFLOW_VERSION_MUTATION,
-  CREATE_WORKFLOW_VERSION_STEP_MUTATION,
   DELETE_WORKFLOW_VERSION_STEP_MUTATION,
   UPDATE_WORKFLOW_VERSION_STEP_MUTATION,
   UPDATE_WORKFLOW_VERSION_TRIGGER_MUTATION,
 } from 'src/shared/api/core-graphql.util';
-import {
-  LAUNCH_PARAMETERS_STEP_INPUT,
-  LAUNCH_PARAMETERS_STEP_NAME,
-  TRIGGER_STEP_ID,
-} from 'src/shared/docflow.constants';
+import { LAUNCH_TRIGGER_NAME, TRIGGER_STEP_ID } from 'src/shared/docflow.constants';
 import { type FormField } from 'src/shared/form/form-field.type';
-import { buildFieldsOutputSchema } from 'src/shared/form/form-field-builder.util';
-import { findLaunchParametersStep } from 'src/shared/workflow/launch-step.util';
+import {
+  buildFieldsExpectedBody,
+  buildFieldsOutputSchema,
+} from 'src/shared/form/form-field-builder.util';
+import { findLaunchParametersStep, isLaunchTrigger } from 'src/shared/workflow/launch-step.util';
+import { type WorkflowStep, type WorkflowTrigger } from 'src/shared/workflow/workflow-run.type';
 import { listWorkflowVersions, type WorkflowVersionRecord } from 'src/server/records';
-import { LAUNCH_PARAMETERS_STEP_LOGIC_FUNCTION_UNIVERSAL_IDENTIFIER } from 'src/universal-identifiers';
 
-export type LaunchStepResult =
-  | { status: 'SAVED'; workflowVersionId: string; stepId: string | null }
+export type LaunchTriggerResult =
+  | { status: 'SAVED'; workflowVersionId: string }
   | { status: 'NOT_MANUAL' };
 
-const MANUAL_TRIGGER = {
+const MANUAL_TRIGGER: WorkflowTrigger = {
   name: 'Запуск вручную',
   type: 'MANUAL',
   position: { x: 0, y: 0 },
@@ -36,23 +32,31 @@ const MANUAL_TRIGGER = {
   nextStepIds: [],
 };
 
-// The step of the workflow editor is created with the function's id in this
-// workspace; the app knows the function by its universal identifier.
-const findLaunchStepLogicFunctionId = async (): Promise<string> => {
-  const { findManyLogicFunctions } = await new MetadataApiClient().query({
-    findManyLogicFunctions: { id: true, universalIdentifier: true },
-  });
-  const logicFunction = findManyLogicFunctions.find(
-    ({ universalIdentifier }) =>
-      universalIdentifier === LAUNCH_PARAMETERS_STEP_LOGIC_FUNCTION_UNIVERSAL_IDENTIFIER,
-  );
+// "Запуск с параметрами": the process starts with one trigger that carries
+// the parameters. Twenty has no trigger type of its own for that, and its
+// editor shows only metadata as variables of a manual trigger, so the trigger
+// is a webhook: the editor offers the fields of its body as variables of the
+// trigger ({{trigger.<field>}}). The webhook takes only requests with an API
+// key; people launch the process from the docflow page, which runs the
+// version with the parameters as the trigger output.
+const buildLaunchTrigger = (base: WorkflowTrigger, fields: FormField[]): WorkflowTrigger => ({
+  name: LAUNCH_TRIGGER_NAME,
+  type: 'WEBHOOK',
+  position: base.position ?? { x: 0, y: 0 },
+  nextStepIds: base.nextStepIds ?? [],
+  settings: {
+    httpMethod: 'POST',
+    authentication: 'API_KEY',
+    expectedBody: buildFieldsExpectedBody(fields),
+    outputSchema: buildFieldsOutputSchema(fields),
+  },
+});
 
-  if (logicFunction === undefined) {
-    throw new Error('The "Launch with parameters" function is not installed');
-  }
-
-  return logicFunction.id;
-};
+const buildManualTrigger = (base: WorkflowTrigger): WorkflowTrigger => ({
+  ...MANUAL_TRIGGER,
+  position: base.position ?? MANUAL_TRIGGER.position,
+  nextStepIds: base.nextStepIds ?? [],
+});
 
 // Only a draft can change: an existing one, or a new one copied from the
 // latest version, as the editor does when a published process is edited.
@@ -75,138 +79,98 @@ const findOrCreateDraft = async (workflowId: string): Promise<WorkflowVersionRec
 // Rows of the workflow canvas are this far apart
 const STEP_ROW_HEIGHT = 150;
 
-type Position = { x: number; y: number };
+// Steps of processes from 0.0.6 and earlier read the parameters from the
+// "Launch with parameters" step: {{<step id>.field}} now reads {{trigger.field}}.
+const retargetStepVariables = (step: WorkflowStep, launchStepId: string): WorkflowStep | undefined => {
+  const settings = JSON.stringify(step.settings ?? {});
+  const retargeted = settings.split(`{{${launchStepId}.`).join(`{{${TRIGGER_STEP_ID}.`);
 
-const readPosition = (value: unknown): Position | undefined => {
-  const { x, y } = (value ?? {}) as Partial<Position>;
-
-  return typeof x === 'number' && typeof y === 'number' ? { x, y } : undefined;
+  return retargeted === settings ? undefined : { ...step, settings: JSON.parse(retargeted) };
 };
 
-// The step goes right under the trigger: every step already at that row or
-// lower moves one row down, so the canvas keeps its order instead of the new
-// step landing under the last one.
-const makeRoomUnderTrigger = async (draft: WorkflowVersionRecord): Promise<Position> => {
-  const triggerPosition = readPosition(draft.trigger?.position) ?? { x: 0, y: 0 };
-  const position = { x: triggerPosition.x, y: triggerPosition.y + STEP_ROW_HEIGHT };
+const removeLegacyLaunchStep = async (draft: WorkflowVersionRecord) => {
+  const launchStep = findLaunchParametersStep(draft.steps);
 
-  for (const step of draft.steps ?? []) {
-    const stepPosition = readPosition(step.position);
-
-    if (stepPosition !== undefined && stepPosition.y >= position.y) {
-      await callCoreGraphql({
-        query: UPDATE_WORKFLOW_VERSION_STEP_MUTATION,
-        variables: {
-          input: {
-            workflowVersionId: draft.id,
-            step: { ...step, position: { ...stepPosition, y: stepPosition.y + STEP_ROW_HEIGHT } },
-          },
-        },
-      });
-    }
+  if (launchStep === undefined) {
+    return;
   }
 
-  return position;
+  await callCoreGraphql({
+    query: DELETE_WORKFLOW_VERSION_STEP_MUTATION,
+    variables: { input: { workflowVersionId: draft.id, stepId: launchStep.id } },
+  });
+
+  const removedY = launchStep.position?.y;
+
+  for (const step of draft.steps ?? []) {
+    if (step.id === launchStep.id) {
+      continue;
+    }
+
+    const retargeted = retargetStepVariables(step, launchStep.id);
+    // Steps under the removed one move up into its row
+    const movesUp =
+      typeof removedY === 'number' && typeof step.position?.y === 'number' && step.position.y > removedY;
+
+    if (retargeted === undefined && !movesUp) {
+      continue;
+    }
+
+    const updated = retargeted ?? step;
+
+    await callCoreGraphql({
+      query: UPDATE_WORKFLOW_VERSION_STEP_MUTATION,
+      variables: {
+        input: {
+          workflowVersionId: draft.id,
+          step:
+            movesUp && step.position
+              ? { ...updated, position: { ...step.position, y: step.position.y - STEP_ROW_HEIGHT } }
+              : updated,
+        },
+      },
+    });
+  }
 };
 
-// Puts the "Launch with parameters" step right after the manual trigger of the
-// draft and describes its output with the parameter fields, so the editor
-// offers them as variables of later steps. No fields, no step.
-export const syncLaunchStep = async ({
+// With parameters the draft starts with "Запуск с параметрами", without them
+// with a plain "Запуск вручную". Any other trigger (record events, schedule,
+// a webhook of its own) is left alone.
+export const syncLaunchTrigger = async ({
   workflowId,
   fields,
 }: {
   workflowId: string;
   fields: FormField[];
-}): Promise<LaunchStepResult | undefined> => {
-  let draft = await findOrCreateDraft(workflowId);
+}): Promise<LaunchTriggerResult | undefined> => {
+  const draft = await findOrCreateDraft(workflowId);
 
   if (draft === undefined) {
     return undefined;
   }
 
-  if (draft.trigger === null || draft.trigger === undefined) {
-    await callCoreGraphql({
-      query: UPDATE_WORKFLOW_VERSION_TRIGGER_MUTATION,
-      variables: { input: { workflowVersionId: draft.id, trigger: MANUAL_TRIGGER } },
-    });
-    draft = { ...draft, trigger: MANUAL_TRIGGER };
-  }
+  const current = draft.trigger ?? MANUAL_TRIGGER;
 
-  if (draft.trigger?.type !== 'MANUAL') {
+  if (current.type !== 'MANUAL' && !isLaunchTrigger(current)) {
     return { status: 'NOT_MANUAL' };
   }
 
-  const existingStep = findLaunchParametersStep(draft.steps);
+  await removeLegacyLaunchStep(draft);
 
-  if (fields.length === 0) {
-    if (existingStep !== undefined) {
-      await callCoreGraphql({
-        query: DELETE_WORKFLOW_VERSION_STEP_MUTATION,
-        variables: { input: { workflowVersionId: draft.id, stepId: existingStep.id } },
-      });
-    }
-
-    return { status: 'SAVED', workflowVersionId: draft.id, stepId: null };
-  }
-
-  let step = existingStep;
-
-  if (step === undefined) {
-    const stepId = crypto.randomUUID();
-    const position = await makeRoomUnderTrigger(draft);
-
-    await callCoreGraphql({
-      query: CREATE_WORKFLOW_VERSION_STEP_MUTATION,
-      variables: {
-        input: {
-          workflowVersionId: draft.id,
-          id: stepId,
-          stepType: 'LOGIC_FUNCTION',
-          parentStepId: TRIGGER_STEP_ID,
-          nextStepId: draft.trigger.nextStepIds?.[0],
-          position,
-          defaultSettings: {
-            input: {
-              logicFunctionId: await findLaunchStepLogicFunctionId(),
-              logicFunctionInput: { parameters: LAUNCH_PARAMETERS_STEP_INPUT },
-            },
-          },
-        },
-      },
-    });
-
-    const versions = await listWorkflowVersions('person', workflowId);
-
-    step = versions
-      .find(({ id }) => id === draft?.id)
-      ?.steps?.find(({ id }) => id === stepId);
-
-    if (step === undefined) {
-      throw new Error(`The launch step ${stepId} was not created`);
-    }
-  }
+  // The legacy step's removal relinked the trigger: read it again
+  const trigger =
+    (await listWorkflowVersions('person', workflowId)).find(({ id }) => id === draft.id)?.trigger ??
+    current;
 
   await callCoreGraphql({
-    query: UPDATE_WORKFLOW_VERSION_STEP_MUTATION,
+    query: UPDATE_WORKFLOW_VERSION_TRIGGER_MUTATION,
     variables: {
       input: {
         workflowVersionId: draft.id,
-        step: {
-          ...step,
-          name: LAUNCH_PARAMETERS_STEP_NAME,
-          // A step put in by an earlier version has no place on the canvas
-          position:
-            readPosition(step.position) ??
-            (await makeRoomUnderTrigger({
-              ...draft,
-              steps: (draft.steps ?? []).filter(({ id }) => id !== step?.id),
-            })),
-          settings: { ...step.settings, outputSchema: buildFieldsOutputSchema(fields) },
-        },
+        trigger: fields.length > 0 ? buildLaunchTrigger(trigger, fields) : buildManualTrigger(trigger),
       },
     },
   });
 
-  return { status: 'SAVED', workflowVersionId: draft.id, stepId: step.id };
+  return { status: 'SAVED', workflowVersionId: draft.id };
 };

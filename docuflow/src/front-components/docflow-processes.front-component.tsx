@@ -15,6 +15,7 @@ import { findMissingRequiredFields } from 'src/shared/form/form-fields.util';
 import { logDocflow, logDocflowError } from 'src/shared/log.util';
 import {
   buildLaunchParameters,
+  isLaunchableTrigger,
   isLaunchParametersStep,
   parseLaunchFields,
 } from 'src/shared/workflow/launch-step.util';
@@ -71,7 +72,7 @@ const loadProcesses = async (searchQuery: string): Promise<DocflowProcess[]> => 
   return workflows.flatMap((workflow) => {
     const version = versions.find((candidate) => candidate.workflowId === workflow.id);
 
-    if (version === undefined || version.trigger?.type !== 'MANUAL') {
+    if (version === undefined || !isLaunchableTrigger(version.trigger)) {
       return [];
     }
 

@@ -1,10 +1,11 @@
 import {
   DOCFLOW_LAUNCH_PARAMETERS_KEY,
   LAUNCH_PARAMETERS_STEP_INPUT,
+  LAUNCH_TRIGGER_NAME,
 } from 'src/shared/docflow.constants';
 import { type FormField, type FormValues } from 'src/shared/form/form-field.type';
 import { getFillableFormFields, parseFormFields } from 'src/shared/form/form-fields.util';
-import { type WorkflowStep } from 'src/shared/workflow/workflow-run.type';
+import { type WorkflowStep, type WorkflowTrigger } from 'src/shared/workflow/workflow-run.type';
 
 const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -23,6 +24,14 @@ export const isLaunchParametersStep = (step: WorkflowStep): boolean => {
     input.logicFunctionInput.parameters === LAUNCH_PARAMETERS_STEP_INPUT
   );
 };
+
+// The "Запуск с параметрами" trigger docflow puts first: a webhook by name
+export const isLaunchTrigger = (trigger: WorkflowTrigger | null | undefined): boolean =>
+  trigger?.type === 'WEBHOOK' && trigger.name === LAUNCH_TRIGGER_NAME;
+
+// Processes docflow launches: by hand, with or without parameters
+export const isLaunchableTrigger = (trigger: WorkflowTrigger | null | undefined): boolean =>
+  trigger?.type === 'MANUAL' || isLaunchTrigger(trigger);
 
 export const findLaunchParametersStep = (
   steps: WorkflowStep[] | null | undefined,

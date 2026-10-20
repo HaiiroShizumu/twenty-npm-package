@@ -5,14 +5,14 @@ import { CoreGraphqlError } from 'src/shared/api/core-graphql.util';
 import { readRestRecord } from 'src/shared/api/rest-response.util';
 import { getFormFieldsError } from 'src/shared/form/form-fields.util';
 import { parseLaunchFields } from 'src/shared/workflow/launch-step.util';
-import { syncLaunchStep } from 'src/server/launch-step';
+import { syncLaunchTrigger } from 'src/server/launch-step';
 import { jsonResponse, readJsonBody } from 'src/server/http-response';
 import { restClient } from 'src/server/records';
 import { logDocflow, logDocflowError } from 'src/shared/log.util';
 import { SAVE_LAUNCH_FIELDS_LOGIC_FUNCTION_UNIVERSAL_IDENTIFIER } from 'src/universal-identifiers';
 
-// Saves the parameters of a process and keeps its draft in step: the
-// "Launch with parameters" step first, its variables matching the fields.
+// Saves the parameters of a process and puts them into its draft as the
+// "Запуск с параметрами" trigger, whose fields later steps read as variables.
 const handler = async (event: RoutePayload) => {
   const body = readJsonBody(event.body);
   const workflowId = body.workflowId;
@@ -41,25 +41,25 @@ const handler = async (event: RoutePayload) => {
   }
 
   try {
-    const result = await syncLaunchStep({ workflowId, fields });
+    const result = await syncLaunchTrigger({ workflowId, fields });
 
     logDocflow('launch fields: draft synced', { workflowId, result });
 
     if (result?.status === 'NOT_MANUAL') {
       return jsonResponse(409, {
-        message: 'Параметры сохранены, но шаг не добавлен: у процесса не ручной запуск',
+        message: 'Параметры сохранены, но запуск процесса не изменён: он запускается не вручную',
       });
     }
 
-    return { status: 'SAVED', stepId: result?.status === 'SAVED' ? result.stepId : null };
+    return { status: 'SAVED' };
   } catch (error) {
     logDocflowError('launch fields: draft not synced', error, { workflowId });
 
     return jsonResponse(502, {
       message:
         error instanceof CoreGraphqlError && error.userMessage !== undefined
-          ? `Параметры сохранены, шаг процесса не обновлён: ${error.userMessage}`
-          : `Параметры сохранены, шаг процесса не обновлён: ${error instanceof Error ? error.message : 'ошибка редактора процессов'}`,
+          ? `Параметры сохранены, запуск процесса не обновлён: ${error.userMessage}`
+          : `Параметры сохранены, запуск процесса не обновлён: ${error instanceof Error ? error.message : 'ошибка редактора процессов'}`,
     });
   }
 };
@@ -67,7 +67,7 @@ const handler = async (event: RoutePayload) => {
 export default defineLogicFunction({
   universalIdentifier: SAVE_LAUNCH_FIELDS_LOGIC_FUNCTION_UNIVERSAL_IDENTIFIER,
   name: 'docflow-save-launch-fields',
-  description: 'Сохраняет параметры запуска процесса и ставит шаг «Параметры запуска»',
+  description: 'Сохраняет параметры запуска и делает первым блоком процесса «Запуск с параметрами»',
   timeoutSeconds: 30,
   handler,
   httpRouteTriggerSettings: {

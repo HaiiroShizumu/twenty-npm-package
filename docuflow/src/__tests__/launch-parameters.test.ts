@@ -4,6 +4,7 @@ import { type FormField } from 'src/shared/form/form-field.type';
 import {
   applyBuilderFieldKind,
   buildFieldNameFromLabel,
+  buildFieldsExpectedBody,
   buildFieldsOutputSchema,
   buildUniqueFieldName,
   getBuilderFieldKind,
@@ -12,6 +13,8 @@ import {
   buildLaunchParameters,
   buildLaunchPayload,
   findLaunchParametersStep,
+  isLaunchableTrigger,
+  isLaunchTrigger,
 } from 'src/shared/workflow/launch-step.util';
 
 const contract: FormField = { id: 'f1', name: 'contract', label: 'Договор', type: 'TEXT' };
@@ -80,5 +83,27 @@ describe('launch parameters', () => {
 
     expect(findLaunchParametersStep([codeStep, launchStep])?.id).toBe('launch');
     expect(findLaunchParametersStep([codeStep])).toBeUndefined();
+  });
+});
+
+describe('launch trigger', () => {
+  const contract = { id: 'c', name: 'contract', label: 'Договор', type: 'TEXT', settings: {} } as FormField;
+  const manager = {
+    id: 'm',
+    name: 'manager',
+    label: 'Руководитель',
+    type: 'RECORD',
+    settings: { objectName: 'workspaceMember' },
+  } as FormField;
+
+  it('builds a webhook body with every parameter', () => {
+    expect(buildFieldsExpectedBody([contract, manager])).toEqual({ contract: '', manager: { id: '' } });
+  });
+
+  it('recognizes the docflow launch trigger and manual triggers', () => {
+    expect(isLaunchTrigger({ type: 'WEBHOOK', name: 'Запуск с параметрами' })).toBe(true);
+    expect(isLaunchTrigger({ type: 'WEBHOOK', name: 'Webhook' })).toBe(false);
+    expect(isLaunchableTrigger({ type: 'MANUAL' })).toBe(true);
+    expect(isLaunchableTrigger({ type: 'CRON' })).toBe(false);
   });
 });
