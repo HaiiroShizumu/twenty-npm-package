@@ -7,7 +7,11 @@
     "access": "public",
     "registry": "https://registry.npmjs.org/"
   },
+  "bin": {
+    "nordiv-docuflow": "bin/install.mjs"
+  },
   "files": [
+    "bin/**/*",
     "manifest.json",
     "front-component-shared-dependencies.mjs",
     "yarn.lock",
