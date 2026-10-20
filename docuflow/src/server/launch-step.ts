@@ -72,6 +72,43 @@ const findOrCreateDraft = async (workflowId: string): Promise<WorkflowVersionRec
   return (await listWorkflowVersions('person', workflowId)).find(({ status }) => status === 'DRAFT');
 };
 
+// Rows of the workflow canvas are this far apart
+const STEP_ROW_HEIGHT = 150;
+
+type Position = { x: number; y: number };
+
+const readPosition = (value: unknown): Position | undefined => {
+  const { x, y } = (value ?? {}) as Partial<Position>;
+
+  return typeof x === 'number' && typeof y === 'number' ? { x, y } : undefined;
+};
+
+// The step goes right under the trigger: every step already at that row or
+// lower moves one row down, so the canvas keeps its order instead of the new
+// step landing under the last one.
+const makeRoomUnderTrigger = async (draft: WorkflowVersionRecord): Promise<Position> => {
+  const triggerPosition = readPosition(draft.trigger?.position) ?? { x: 0, y: 0 };
+  const position = { x: triggerPosition.x, y: triggerPosition.y + STEP_ROW_HEIGHT };
+
+  for (const step of draft.steps ?? []) {
+    const stepPosition = readPosition(step.position);
+
+    if (stepPosition !== undefined && stepPosition.y >= position.y) {
+      await callCoreGraphql({
+        query: UPDATE_WORKFLOW_VERSION_STEP_MUTATION,
+        variables: {
+          input: {
+            workflowVersionId: draft.id,
+            step: { ...step, position: { ...stepPosition, y: stepPosition.y + STEP_ROW_HEIGHT } },
+          },
+        },
+      });
+    }
+  }
+
+  return position;
+};
+
 // Puts the "Launch with parameters" step right after the manual trigger of the
 // draft and describes its output with the parameter fields, so the editor
 // offers them as variables of later steps. No fields, no step.
@@ -117,6 +154,7 @@ export const syncLaunchStep = async ({
 
   if (step === undefined) {
     const stepId = crypto.randomUUID();
+    const position = await makeRoomUnderTrigger(draft);
 
     await callCoreGraphql({
       query: CREATE_WORKFLOW_VERSION_STEP_MUTATION,
@@ -127,6 +165,7 @@ export const syncLaunchStep = async ({
           stepType: 'LOGIC_FUNCTION',
           parentStepId: TRIGGER_STEP_ID,
           nextStepId: draft.trigger.nextStepIds?.[0],
+          position,
           defaultSettings: {
             input: {
               logicFunctionId: await findLaunchStepLogicFunctionId(),
@@ -156,6 +195,13 @@ export const syncLaunchStep = async ({
         step: {
           ...step,
           name: LAUNCH_PARAMETERS_STEP_NAME,
+          // A step put in by an earlier version has no place on the canvas
+          position:
+            readPosition(step.position) ??
+            (await makeRoomUnderTrigger({
+              ...draft,
+              steps: (draft.steps ?? []).filter(({ id }) => id !== step?.id),
+            })),
           settings: { ...step.settings, outputSchema: buildFieldsOutputSchema(fields) },
         },
       },

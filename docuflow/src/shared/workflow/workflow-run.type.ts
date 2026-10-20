@@ -15,6 +15,7 @@ export type WorkflowStep = {
   type: string;
   settings?: { input?: unknown; outputSchema?: unknown } & Record<string, unknown>;
   nextStepIds?: string[] | null;
+  position?: { x: number; y: number } | null;
 };
 
 export type WorkflowTrigger = {
@@ -22,6 +23,7 @@ export type WorkflowTrigger = {
   name?: string | null;
   nextStepIds?: string[] | null;
   settings?: Record<string, unknown> | null;
+  position?: { x: number; y: number } | null;
 };
 
 export type WorkflowRunState = {

@@ -48,7 +48,11 @@ export const buildLaunchParameters = ({
     }),
   );
 
+// The trigger output of the run: each parameter by its field name for
+// {{trigger.field}}, and all of them under one key for the "Launch with
+// parameters" step that processes published before 0.0.7 still have.
 export const buildLaunchPayload = (parameters: FormValues): Record<string, unknown> => ({
+  ...parameters,
   [DOCFLOW_LAUNCH_PARAMETERS_KEY]: parameters,
 });
 

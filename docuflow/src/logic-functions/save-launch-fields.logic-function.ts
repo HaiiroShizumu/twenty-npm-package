@@ -67,7 +67,7 @@ const handler = async (event: RoutePayload) => {
 export default defineLogicFunction({
   universalIdentifier: SAVE_LAUNCH_FIELDS_LOGIC_FUNCTION_UNIVERSAL_IDENTIFIER,
   name: 'docflow-save-launch-fields',
-  description: 'Сохраняет параметры запуска процесса и ставит шаг «Запуск с параметрами»',
+  description: 'Сохраняет параметры запуска процесса и ставит шаг «Параметры запуска»',
   timeoutSeconds: 30,
   handler,
   httpRouteTriggerSettings: {

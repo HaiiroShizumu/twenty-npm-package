@@ -190,7 +190,7 @@ export const PROCESS_STEPS_FRONT_COMPONENT_UNIVERSAL_IDENTIFIER =
 export const WORKFLOW_STEPS_COMMAND_MENU_ITEM_UNIVERSAL_IDENTIFIER =
   'c3f5a2d4-7e1b-4c9a-8f36-2b5d0e7a91c4';
 
-// Запуск с параметрами: поля параметров у процесса и шаг, который отдаёт их
+// Параметры запуска: поля параметров у процесса и шаг, который отдаёт их
 // следующим шагам переменными.
 export const WORKFLOW_LAUNCH_FIELDS_UNIVERSAL_IDENTIFIER =
   '5a84e70d-ee1d-4fa4-a0f5-094e3c6fb487';

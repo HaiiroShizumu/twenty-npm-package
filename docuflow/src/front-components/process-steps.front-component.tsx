@@ -72,7 +72,7 @@ const LaunchParametersEditor = ({
       await enqueueSnackbar({
         message:
           fields.length > 0
-            ? `Параметры сохранены, шаг «${LAUNCH_PARAMETERS_STEP_NAME}» стоит в черновике первым`
+            ? `Параметры сохранены: шаг «${LAUNCH_PARAMETERS_STEP_NAME}» стоит в черновике после запуска, опубликуйте процесс`
             : 'Параметры убраны',
         variant: 'success',
       });
@@ -89,8 +89,9 @@ const LaunchParametersEditor = ({
     <section style={{ ...sectionStyle, gap: theme.spacing[2] }} aria-label={LAUNCH_PARAMETERS_STEP_NAME}>
       <SectionTitle>{LAUNCH_PARAMETERS_STEP_NAME}</SectionTitle>
       <Message tone="hint">
-        Что человек заполняет перед запуском. Значения хранятся в запуске, а следующие шаги читают их
-        переменными шага «{LAUNCH_PARAMETERS_STEP_NAME}»: шаг ставится в черновик сам при сохранении.
+        Что человек заполняет перед запуском. Шаг «{LAUNCH_PARAMETERS_STEP_NAME}» встаёт после
+        «Запуск вручную» сам: в следующих шагах значения выбираются в списке переменных этого шага,
+        например сотрудник — в поле «Исполнитель».
       </Message>
       <FormFieldsBuilder
         fields={fields}

@@ -10,6 +10,7 @@ import {
 } from 'src/shared/form/form-field-builder.util';
 import {
   buildLaunchParameters,
+  buildLaunchPayload,
   findLaunchParametersStep,
 } from 'src/shared/workflow/launch-step.util';
 
@@ -43,7 +44,15 @@ describe('launch parameters', () => {
     ).toEqual({ contract: null, manager: { id: 'm' } });
   });
 
-  it('describes the parameters as variables of the step', () => {
+  it('puts each parameter into the trigger output, and all of them for older launch steps', () => {
+    expect(buildLaunchPayload({ contract: 'Д-7', manager: null })).toEqual({
+      contract: 'Д-7',
+      manager: null,
+      smbDocflowParameters: { contract: 'Д-7', manager: null },
+    });
+  });
+
+  it('describes the parameters as variables of the trigger', () => {
     expect(buildFieldsOutputSchema([contract, manager])).toEqual({
       contract: { isLeaf: true, type: 'string', label: 'Договор', value: null },
       manager: {

@@ -12,7 +12,7 @@ export const DOCFLOW_LAUNCH_PARAMETERS_KEY = 'smbDocflowParameters';
 // so the step returns them as its output and later steps read them as
 // {{<step>.<field>}}.
 export const LAUNCH_PARAMETERS_STEP_INPUT = `{{trigger.${DOCFLOW_LAUNCH_PARAMETERS_KEY}}}`;
-export const LAUNCH_PARAMETERS_STEP_NAME = 'Запуск с параметрами';
+export const LAUNCH_PARAMETERS_STEP_NAME = 'Параметры запуска';
 
 export const TASK_DONE_STATUS = 'DONE';
 export const TASK_TODO_STATUS = 'TODO';
