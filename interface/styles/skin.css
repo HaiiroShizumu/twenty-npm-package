@@ -680,10 +680,12 @@ html[data-skin='smb']:has([data-smb-top-bar])
    only the root carries a hook, hence the one structural selector. If
    upstream reshapes the layout this stops matching and the page falls back
    to an opaque frost card: degraded, not broken. */
+/* The content panel has no frame line: glass and a soft shadow set it off
+   the wallpaper, and the page breathes more without one. */
 html[data-skin='smb'] [data-page-surface='main'] > * > * {
   backdrop-filter: var(--smb-glass-backdrop);
   background: var(--smb-surface-l1);
-  border: 1px solid var(--smb-border-l1);
+  border: 1px solid transparent;
   border-radius: var(--radius-panel);
   box-shadow: var(--smb-shadow-l1);
   isolation: isolate;
@@ -774,4 +776,16 @@ html[data-skin='smb'] [data-smb-embedded] [data-page-surface='main'] > * > * {
   html[data-skin='smb'] [data-smb-wallpaper-layer] {
     display: none;
   }
+}
+
+/*
+  A widget that fills a whole page tab (an app page such as Документооборот)
+  already sits in the page frame; Twenty still draws it as a framed card and
+  frames the app's component inside it once more (classes are hashed, hence
+  the structural selector), which reads as a double border. Dashboards with several cards keep their frames.
+*/
+html[data-skin='smb'] .page-layout-viewport-filling-widget-slot .widget,
+html[data-skin='smb'] .page-layout-viewport-filling-widget-slot .widget > * > * {
+  background: transparent;
+  border-color: transparent;
 }

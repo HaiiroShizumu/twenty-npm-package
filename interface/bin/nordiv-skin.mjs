@@ -22,10 +22,17 @@ const END_MARKER = '<!-- nordiv-skin:end -->';
 const INSTALL_FOLDER = 'nordiv-skin';
 const MANIFEST_FILE = 'manifest.json';
 
+// The version in the URLs makes browsers drop the cached files of the
+// previous install: the paths themselves never change.
+const { version: packageVersion } = JSON.parse(
+  readFileSync(join(packageDirectory, 'package.json'), 'utf8'),
+);
+const ASSET_QUERY = `?v=${encodeURIComponent(packageVersion)}`;
+
 const HEAD_TAGS = [
   START_MARKER,
-  `<link rel="stylesheet" href="/${INSTALL_FOLDER}/skin.css" />`,
-  `<script defer src="/${INSTALL_FOLDER}/standalone.js"></script>`,
+  `<link rel="stylesheet" href="/${INSTALL_FOLDER}/skin.css${ASSET_QUERY}" />`,
+  `<script defer src="/${INSTALL_FOLDER}/standalone.js${ASSET_QUERY}"></script>`,
   END_MARKER,
 ].join('\n    ');
 
