@@ -15,6 +15,7 @@ import {
   setFieldRequired,
 } from 'src/shared/form/form-field-builder.util';
 import { isFormFieldRequired } from 'src/shared/form/form-fields.util';
+import { createId } from 'src/front/create-id';
 
 // Fields are built here instead of written as JSON. A field keeps its name
 // once saved: later steps of a process read it as {{step.name}}, so renaming
@@ -157,7 +158,7 @@ export const FormFieldsBuilder = ({
           variant="outline"
           size="sm"
           disabled={disabled}
-          onClick={() => onChange([...fields, buildNewBuilderField(fields, () => crypto.randomUUID())])}
+          onClick={() => onChange([...fields, buildNewBuilderField(fields, createId)])}
         >
           Добавить поле
         </Button>
