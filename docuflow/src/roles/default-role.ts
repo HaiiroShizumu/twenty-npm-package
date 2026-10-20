@@ -17,5 +17,12 @@ export default defineApplicationRole({
   canUpdateAllObjectRecords: true,
   canSoftDeleteAllObjectRecords: false,
   canDestroyAllObjectRecords: false,
-  permissionFlagUniversalIdentifiers: [SystemPermissionFlag.WORKFLOWS],
+  // UPLOAD_FILE and DOWNLOAD_FILE: collecting a file into documents reads
+  // the attachment's file and uploads the document's own copy. Without them
+  // the copy silently never happens on a stock Twenty.
+  permissionFlagUniversalIdentifiers: [
+    SystemPermissionFlag.WORKFLOWS,
+    SystemPermissionFlag.UPLOAD_FILE,
+    SystemPermissionFlag.DOWNLOAD_FILE,
+  ],
 });

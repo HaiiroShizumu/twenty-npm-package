@@ -9,6 +9,7 @@ import {
 } from 'src/shared/documents/attachment-target.util';
 import { getObjectSummaries } from 'src/shared/api/object-summaries';
 import { getTask, restClient } from 'src/server/records';
+import { logDocflow } from 'src/shared/log.util';
 import { DOCUMENT_FILE_UNIVERSAL_IDENTIFIER } from 'src/universal-identifiers';
 
 export type FileCapture = {
@@ -52,6 +53,8 @@ export const captureFile = async (capture: FileCapture): Promise<CaptureResult> 
   ).records;
 
   if (existing.length > 0) {
+    logDocflow('capture: already a document', { fileId: capture.fileId });
+
     return 'ALREADY_CAPTURED';
   }
 
@@ -63,6 +66,12 @@ export const captureFile = async (capture: FileCapture): Promise<CaptureResult> 
   );
 
   if (file?.url === undefined) {
+    logDocflow('capture: file is gone from the attachment', {
+      attachmentId: capture.attachmentId,
+      fileId: capture.fileId,
+      attachmentFound: attachment !== undefined,
+    });
+
     return 'FILE_GONE';
   }
 
@@ -80,7 +89,7 @@ export const captureFile = async (capture: FileCapture): Promise<CaptureResult> 
 
   const workflowRunId =
     capture.sourceObjectName === 'task'
-      ? ((await getTask('application', capture.sourceRecordId))?.smbWorkflowRunId ?? null)
+      ? ((await getTask('application', capture.sourceRecordId))?.smbWorkflowRunId || null)
       : null;
 
   await restClient('application').post('/rest/smbDocuments', {
@@ -96,6 +105,11 @@ export const captureFile = async (capture: FileCapture): Promise<CaptureResult> 
     sourceFileId: capture.fileId,
     workflowRunId,
     authorId: capture.workspaceMemberId,
+  });
+
+  logDocflow('capture: document created', {
+    fileId: capture.fileId,
+    source: `${capture.sourceObjectName}/${capture.sourceRecordId}`,
   });
 
   return 'CREATED';
