@@ -1,4 +1,4 @@
-import { type CSSProperties, type ReactNode, useId } from 'react';
+import { type CSSProperties, type ReactNode, useId, useState } from 'react';
 import { Button } from 'twenty-ui/primitives/input';
 import { useTheme } from 'twenty-ui/theme';
 
@@ -34,7 +34,7 @@ export const Toolbar = ({ children }: { children: ReactNode }) => {
         display: 'flex',
         flexWrap: 'wrap',
         gap: theme.spacing[2],
-        padding: `${theme.spacing[2]} ${theme.spacing[4]}`,
+        padding: `${theme.spacing[4]} ${theme.spacing[5]} ${theme.spacing[3]}`,
       }}
     >
       {children}
@@ -304,62 +304,89 @@ export const DataTable = ({
   onRowClick: (rowId: string) => void;
 }) => {
   const theme = useTheme();
+  const [hoveredRowId, setHoveredRowId] = useState<string | undefined>();
   const cellStyle: CSSProperties = {
     overflow: 'hidden',
-    padding: `${theme.spacing[2]} ${theme.spacing[4]}`,
+    padding: `${theme.spacing[3]} ${theme.spacing[3]}`,
     textAlign: 'left',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   };
+  const rowRadius = theme.border.radius.sm;
 
+  // Quiet by design: faint dividers, the first column in the main color and
+  // the rest muted, a soft highlight instead of lines around rows.
   return (
-    <table style={{ borderCollapse: 'collapse', tableLayout: 'fixed', width: '100%' }}>
-      <thead>
-        <tr>
-          {columns.map((column) => (
-            <th
-              key={column.key}
-              scope="col"
-              style={{
-                ...cellStyle,
-                color: theme.font.color.tertiary,
-                fontSize: theme.font.size.sm,
-                fontWeight: theme.font.weight.medium,
-                width: column.width,
-              }}
-            >
-              {column.label}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row) => (
-          <tr
-            key={row.id}
-            tabIndex={0}
-            aria-selected={row.id === selectedRowId}
-            onClick={() => onRowClick(row.id)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                onRowClick(row.id);
-              }
-            }}
-            style={{
-              background: row.id === selectedRowId ? theme.background.transparent.light : 'transparent',
-              borderTop: `1px solid ${theme.border.color.light}`,
-              cursor: 'pointer',
-            }}
-          >
+    <div style={{ padding: `0 ${theme.spacing[2]} ${theme.spacing[4]}` }}>
+      <table style={{ borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed', width: '100%' }}>
+        <thead>
+          <tr>
             {columns.map((column) => (
-              <td key={column.key} style={cellStyle}>
-                {row.cells[column.key]}
-              </td>
+              <th
+                key={column.key}
+                scope="col"
+                style={{
+                  ...cellStyle,
+                  color: theme.font.color.light,
+                  fontSize: theme.font.size.sm,
+                  fontWeight: theme.font.weight.regular,
+                  paddingBottom: theme.spacing[2],
+                  paddingTop: theme.spacing[2],
+                  width: column.width,
+                }}
+              >
+                {column.label}
+              </th>
             ))}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const isSelected = row.id === selectedRowId;
+            const isHovered = row.id === hoveredRowId;
+
+            return (
+              <tr
+                key={row.id}
+                tabIndex={0}
+                aria-selected={isSelected}
+                onClick={() => onRowClick(row.id)}
+                onMouseEnter={() => setHoveredRowId(row.id)}
+                onMouseLeave={() => setHoveredRowId((current) => (current === row.id ? undefined : current))}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    onRowClick(row.id);
+                  }
+                }}
+                style={{ cursor: 'pointer' }}
+              >
+                {columns.map((column, index) => (
+                  <td
+                    key={column.key}
+                    style={{
+                      ...cellStyle,
+                      background: isSelected
+                        ? theme.background.transparent.light
+                        : isHovered
+                          ? theme.background.transparent.lighter
+                          : 'transparent',
+                      borderTop: `1px solid ${isSelected || isHovered ? 'transparent' : theme.background.transparent.lighter}`,
+                      borderBottomLeftRadius: index === 0 ? rowRadius : 0,
+                      borderBottomRightRadius: index === columns.length - 1 ? rowRadius : 0,
+                      borderTopLeftRadius: index === 0 ? rowRadius : 0,
+                      borderTopRightRadius: index === columns.length - 1 ? rowRadius : 0,
+                      color: index === 0 ? theme.font.color.primary : theme.font.color.secondary,
+                    }}
+                  >
+                    {row.cells[column.key]}
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 };
 

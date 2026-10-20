@@ -8,10 +8,12 @@ import { callAppRoute, createRecord, getErrorMessage, listRecords } from 'src/fr
 import { useAsync, useDebouncedValue } from 'src/front/hooks/use-async';
 import { DataTable, DocflowRoot, Message, SplitView, TextField, Toolbar } from 'src/front/ui/components';
 import { FormFieldInputs } from 'src/front/ui/form-field-inputs';
+import { FormFieldsBuilder } from 'src/front/ui/form-fields-builder';
 import { restAnd, restEq, restIlike, restIn } from 'src/shared/api/rest-filter.util';
-import { DOCFLOW_SECTION } from 'src/shared/docflow.constants';
+import { DOCFLOW_SECTION, LAUNCH_PARAMETERS_STEP_NAME } from 'src/shared/docflow.constants';
 import { type FormField, type FormValues } from 'src/shared/form/form-field.type';
-import { findMissingRequiredFields } from 'src/shared/form/form-fields.util';
+import { findMissingRequiredFields, getFormFieldsError } from 'src/shared/form/form-fields.util';
+import { logDocflow, logDocflowError } from 'src/shared/log.util';
 import {
   buildLaunchParameters,
   isLaunchParametersStep,
@@ -22,6 +24,12 @@ import { PROCESSES_FRONT_COMPONENT_UNIVERSAL_IDENTIFIER } from 'src/universal-id
 
 const PROCESSES_LIMIT = 200;
 const SEARCH_DEBOUNCE_MS = 300;
+const DRAFT_WAIT_ATTEMPTS = 10;
+const DRAFT_WAIT_MS = 400;
+
+type ProcessKind = 'plain' | 'parameters';
+
+type Panel = { kind: 'closed' } | { kind: 'process'; workflowVersionId: string } | { kind: 'new' };
 
 type WorkflowRecord = { id: string; name?: string | null; smbLaunchFields?: unknown };
 type WorkflowVersionRecord = {
@@ -153,52 +161,140 @@ const ProcessLaunchForm = ({
   );
 };
 
-const DocflowProcesses = () => {
-  const theme = useTheme();
-  const [searchInput, setSearchInput] = useState('');
-  const searchQuery = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS);
-  const [selectedVersionId, setSelectedVersionId] = useState<string | undefined>();
-  const [isCreating, setIsCreating] = useState(false);
-  const { data: processes, loading, error } = useAsync(() => loadProcesses(searchQuery), [searchQuery]);
-  const selectedProcess = processes?.find((process) => process.workflowVersionId === selectedVersionId);
+// The server gives a new workflow its first draft version right after the
+// record; the launch step can only be put into an existing draft.
+const waitForDraft = async (workflowId: string) => {
+  for (let attempt = 0; attempt < DRAFT_WAIT_ATTEMPTS; attempt++) {
+    const { records } = await listRecords<{ id: string }>('workflowVersions', {
+      filter: restEq('workflowId', workflowId),
+      limit: 1,
+    });
 
-  // Created in the docflow section, then opened in the standard editor.
+    if (records.length > 0) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_WAIT_MS));
+  }
+};
+
+const NewProcessForm = () => {
+  const theme = useTheme();
+  const [name, setName] = useState('');
+  const [kind, setKind] = useState<ProcessKind>('parameters');
+  const [fields, setFields] = useState<FormField[]>([]);
+  const [isCreating, setIsCreating] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | undefined>();
+
+  // Created in the docflow section with a manual trigger; "with parameters"
+  // also gets the "Launch with parameters" step right after the trigger, its
+  // fields being variables for every later step. Then the standard editor.
   const handleCreate = async () => {
+    const launchFields = kind === 'parameters' ? fields : [];
+    const fieldsError = getFormFieldsError(launchFields);
+
+    if (kind === 'parameters' && launchFields.length === 0) {
+      setErrorMessage('Добавьте хотя бы одно поле или выберите обычный процесс');
+
+      return;
+    }
+
+    if (fieldsError !== undefined) {
+      setErrorMessage(fieldsError);
+
+      return;
+    }
+
     setIsCreating(true);
+    setErrorMessage(undefined);
+    logDocflow('process: create', { kind, fieldCount: launchFields.length });
 
     try {
       const workflow = await createRecord<WorkflowRecord>('workflows', {
-        name: 'Новый процесс',
+        name: name.trim() || 'Новый процесс',
         smbSection: DOCFLOW_SECTION,
       });
 
-      if (workflow !== undefined) {
-        await navigate(AppPath.RecordShowPage, {
-          objectNameSingular: 'workflow',
-          objectRecordId: workflow.id,
-        });
+      if (workflow === undefined) {
+        throw new Error('процесс создан, но сервер его не вернул');
       }
-    } catch (createError) {
-      await enqueueSnackbar({
-        message: getErrorMessage(createError, 'Не удалось создать процесс'),
-        variant: 'error',
+
+      await waitForDraft(workflow.id);
+      await callAppRoute('/docflow/processes/launch-fields', {
+        workflowId: workflow.id,
+        fields: launchFields,
       });
+      await navigate(AppPath.RecordShowPage, {
+        objectNameSingular: 'workflow',
+        objectRecordId: workflow.id,
+      });
+    } catch (createError) {
+      logDocflowError('process: create failed', createError);
+      setErrorMessage(getErrorMessage(createError, 'Не удалось создать процесс'));
     } finally {
       setIsCreating(false);
     }
   };
 
+  const kindButton = (value: ProcessKind, label: string) => (
+    <Button
+      variant={kind === value ? 'solid' : 'outline'}
+      size="sm"
+      disabled={isCreating}
+      onClick={() => setKind(value)}
+    >
+      {label}
+    </Button>
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing[3] }}>
+      <TextField label="Название" placeholder="Новый процесс" value={name} onChange={setName} />
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: theme.spacing[2] }}>
+        {kindButton('parameters', LAUNCH_PARAMETERS_STEP_NAME)}
+        {kindButton('plain', 'Обычный процесс')}
+      </div>
+      {kind === 'parameters' ? (
+        <>
+          <Message tone="hint">
+            Поля, которые человек заполняет перед запуском. В процессе появится шаг «
+            {LAUNCH_PARAMETERS_STEP_NAME}», и следующие шаги берут значения из его переменных.
+          </Message>
+          <FormFieldsBuilder fields={fields} onChange={setFields} disabled={isCreating} />
+        </>
+      ) : (
+        <Message tone="hint">Ручной запуск без параметров. Шаги добавляются в редакторе.</Message>
+      )}
+      {errorMessage !== undefined && <Message tone="danger">{errorMessage}</Message>}
+      <Button variant="solid" size="md" fullWidth loading={isCreating} onClick={() => void handleCreate()}>
+        Создать и открыть редактор
+      </Button>
+    </div>
+  );
+};
+
+const DocflowProcesses = () => {
+  const theme = useTheme();
+  const [searchInput, setSearchInput] = useState('');
+  const searchQuery = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS);
+  const [panel, setPanel] = useState<Panel>({ kind: 'closed' });
+  const { data: processes, loading, error } = useAsync(() => loadProcesses(searchQuery), [searchQuery]);
+  const selectedVersionId = panel.kind === 'process' ? panel.workflowVersionId : undefined;
+  const selectedProcess = processes?.find((process) => process.workflowVersionId === selectedVersionId);
+
   return (
     <DocflowRoot>
       <SplitView
-        panelTitle={selectedProcess?.name}
-        onClosePanel={() => setSelectedVersionId(undefined)}
+        panelTitle={panel.kind === 'new' ? 'Новый процесс' : selectedProcess?.name}
+        onClosePanel={() => setPanel({ kind: 'closed' })}
         panel={
-          selectedProcess !== undefined ? (
+          panel.kind === 'new' ? (
+            <NewProcessForm />
+          ) : selectedProcess !== undefined ? (
             <ProcessLaunchForm
               key={selectedProcess.workflowVersionId}
               process={selectedProcess}
-              onLaunched={() => setSelectedVersionId(undefined)}
+              onLaunched={() => setPanel({ kind: 'closed' })}
             />
           ) : undefined
         }
@@ -214,7 +310,7 @@ const DocflowProcesses = () => {
             />
           </div>
           <div style={{ marginLeft: 'auto' }}>
-            <Button variant="outline" size="sm" loading={isCreating} onClick={() => void handleCreate()}>
+            <Button variant="solid" size="sm" onClick={() => setPanel({ kind: 'new' })}>
               Создать
             </Button>
           </div>
@@ -227,7 +323,7 @@ const DocflowProcesses = () => {
         {loading && processes === undefined && <Message>Загрузка…</Message>}
         {!loading && error === undefined && processes?.length === 0 && (
           <Message>
-            Процессов для запуска нет. Здесь видны опубликованные процессы с ручным запуском и разделом «Документооборот». Параметры запуска задаются на вкладке процесса «Запуск и задания».
+            Процессов для запуска нет. Здесь видны опубликованные процессы с ручным запуском и разделом «Документооборот». Параметры запуска задаются командой процесса «Запуск и задания» (кнопка вверху карточки процесса).
           </Message>
         )}
         {processes !== undefined && processes.length > 0 && (
@@ -238,7 +334,7 @@ const DocflowProcesses = () => {
               { key: 'stages', label: 'Этапы' },
             ]}
             selectedRowId={selectedVersionId}
-            onRowClick={setSelectedVersionId}
+            onRowClick={(workflowVersionId) => setPanel({ kind: 'process', workflowVersionId })}
             rows={processes.map((process) => {
               const parameterCount = process.launchFields.length;
 

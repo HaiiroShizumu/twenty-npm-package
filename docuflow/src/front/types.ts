@@ -35,6 +35,7 @@ export type DocflowDocument = {
   sourceRecordName?: string | null;
   workflowRunId?: string | null;
   createdAt: string;
+  updatedAt?: string | null;
   folderId?: string | null;
   file?: FileValue[] | null;
   author?: WorkspaceMember | null;
