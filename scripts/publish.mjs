@@ -151,7 +151,7 @@ try {
 // "latest" still points at the previous one: installing right away would put
 // the old version back.
 const waitForRegistry = async (name, version) => {
-  for (let attempt = 0; attempt < 40; attempt++) {
+  for (let attempt = 0; attempt < 80; attempt++) {
     const response = await fetch(`https://registry.npmjs.org/${name}/latest?t=${Date.now()}`, {
       headers: { 'cache-control': 'no-cache' },
     }).catch(() => null);
@@ -163,7 +163,7 @@ const waitForRegistry = async (name, version) => {
     await new Promise((resolve) => setTimeout(resolve, 15000));
   }
 
-  fail(`${name}@${version} не появился в npm за 10 минут, установите позже: yarn reinstall`);
+  fail(`${name}@${version} не появился в npm за 20 минут, установите позже: yarn reinstall`);
 };
 
 if (options.install && published.length > 0) {
