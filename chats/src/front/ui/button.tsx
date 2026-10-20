@@ -40,13 +40,19 @@ export const Button = ({
       : variant === 'solid'
         ? theme.font.color.inverted
         : theme.font.color.secondary;
+  // Outline buttons are a dense fill of the surface color, not a tint: over a
+  // wallpaper skin a see-through button gets lost in the picture.
+  const surface = (percent: number) =>
+    `color-mix(in srgb, ${theme.background.primary} ${percent}%, transparent)`;
   const background =
     variant === 'solid'
       ? theme.background.invertedPrimary
       : isHovered && !isInactive
-        ? theme.background.transparent.light
+        ? variant === 'outline'
+          ? surface(94)
+          : theme.background.transparent.light
         : variant === 'outline'
-          ? theme.background.transparent.lighter
+          ? surface(80)
           : 'transparent';
 
   return (

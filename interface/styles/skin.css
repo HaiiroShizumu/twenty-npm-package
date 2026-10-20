@@ -686,7 +686,8 @@ html[data-skin='smb'] [data-page-surface='main'] > * > * {
   backdrop-filter: var(--smb-glass-backdrop);
   background: var(--smb-surface-l1);
   border: 1px solid transparent;
-  border-radius: var(--radius-panel);
+  /* Square: the panel meets the window edge, a rounded corner there reads as a gap */
+  border-radius: 0;
   box-shadow: var(--smb-shadow-l1);
   isolation: isolate;
 }
@@ -699,7 +700,7 @@ html[data-skin='smb'] :has(> [data-side-panel]) {
   backdrop-filter: var(--smb-glass-backdrop);
   background: var(--smb-surface-l1);
   border: 1px solid var(--smb-border-l1);
-  border-radius: var(--radius-panel);
+  border-radius: 0;
   box-shadow: var(--smb-shadow-l1);
   isolation: isolate;
   overflow: hidden;
@@ -788,4 +789,22 @@ html[data-skin='smb'] .page-layout-viewport-filling-widget-slot .widget,
 html[data-skin='smb'] .page-layout-viewport-filling-widget-slot .widget > * > * {
   background: transparent;
   border-color: transparent;
+}
+
+/*
+  Buttons over a wallpaper: a see-through button on glass over a busy picture
+  is hard to find, so outline and soft buttons get a denser fill of the
+  surface color (light in the light theme, dark in the dark one) and their
+  own blur. Twenty marks its buttons with data-variant; app buttons use the
+  same --t-background-primary themselves.
+*/
+html[data-skin='smb'][data-background='image']
+  button:is([data-variant='outline'], [data-variant='soft'], [data-variant='secondary']) {
+  backdrop-filter: blur(10px) saturate(1.15);
+  background: color-mix(in srgb, var(--t-background-primary) 78%, transparent);
+}
+
+html[data-skin='smb'][data-background='image']
+  button:is([data-variant='outline'], [data-variant='soft'], [data-variant='secondary']):hover {
+  background: color-mix(in srgb, var(--t-background-primary) 92%, transparent);
 }

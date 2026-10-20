@@ -289,11 +289,18 @@ export const uploadAndInstallApp = async (connection, { label, tarball, universa
     console.log(`  версия ${version} уже загружена в CRM раньше, ставлю её`);
   }
 
-  await callMetadata(
-    connection,
-    `mutation InstallApplication($universalIdentifier: String!, $version: String) {
-      installApplication(universalIdentifier: $universalIdentifier, version: $version) { id }
-    }`,
-    { universalIdentifier, version },
-  );
+  try {
+    await callMetadata(
+      connection,
+      `mutation InstallApplication($universalIdentifier: String!, $version: String) {
+        installApplication(universalIdentifier: $universalIdentifier, version: $version) { id }
+      }`,
+      { universalIdentifier, version },
+    );
+  } catch (error) {
+    // The same version is installed already: nothing to do
+    if (!/already installed/i.test(error.message)) {
+      throw error;
+    }
+  }
 };

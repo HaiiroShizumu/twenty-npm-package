@@ -94,6 +94,12 @@ class CrmApiError extends Error {
     this.rawMessage = graphqlError?.message ?? '';
   }
 
+  // This version's archive was uploaded to the CRM before (also before an
+  // uninstall): the server keeps it and installs from that copy.
+  get isAlreadyDeployed() {
+    return /not higher than the currently deployed/i.test(`${this.message} ${this.rawMessage}`);
+  }
+
   // The app was installed from the marketplace on this CRM: the server keeps
   // it tied to npm and refuses an archive for it.
   get isSourceChannelMismatch() {
@@ -161,23 +167,39 @@ const install = async (options) => {
   try {
     await uploadArchive(connection, label, tarball);
   } catch (error) {
-    if (!(error instanceof CrmApiError) || !error.isSourceChannelMismatch) {
+    if (!(error instanceof CrmApiError) || !(error.isSourceChannelMismatch || error.isAlreadyDeployed)) {
       throw error;
     }
 
     // Installed from the marketplace before: the server fetches the same
-    // version from npm itself.
-    console.log('→ Приложение подключено из каталога npm, ставлю эту версию через каталог');
+    // version from npm itself. Or this version was uploaded before: the
+    // server has its copy.
+    console.log(
+      error.isAlreadyDeployed
+        ? `→ Версия ${options.version} уже загружена в CRM раньше, ставлю её`
+        : '→ Приложение подключено из каталога npm, ставлю эту версию через каталог',
+    );
   }
 
   console.log(`→ Устанавливаю «${manifest.application.displayName ?? packageJson.name}» ${options.version}`);
-  await callMetadataApi(
-    connection,
-    `mutation InstallApplication($universalIdentifier: String!, $version: String) {
-      installApplication(universalIdentifier: $universalIdentifier, version: $version) { id }
-    }`,
-    { universalIdentifier: manifest.application.universalIdentifier, version: options.version },
-  );
+
+  try {
+    await callMetadataApi(
+      connection,
+      `mutation InstallApplication($universalIdentifier: String!, $version: String) {
+        installApplication(universalIdentifier: $universalIdentifier, version: $version) { id }
+      }`,
+      { universalIdentifier: manifest.application.universalIdentifier, version: options.version },
+    );
+  } catch (error) {
+    if (!(error instanceof CrmApiError) || !/already installed/i.test(`${error.message} ${error.rawMessage}`)) {
+      throw error;
+    }
+
+    console.log(`\n✓ ${label} уже установлен в этой CRM.\n`);
+
+    return;
+  }
 
   console.log(`\n✓ ${label} установлен. Обновите страницу CRM.\n`);
 };

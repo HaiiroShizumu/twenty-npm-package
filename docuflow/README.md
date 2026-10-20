@@ -32,19 +32,19 @@
 
 ## Установка
 
-На сервере, где запущен Twenty, из каталога с его `docker-compose.yml`; повторный запуск
-ставит новую версию:
+С любого компьютера с Node.js 20+, нужен только адрес CRM и ключ API администратора
+(«Настройки → API и вебхуки → Создать ключ»). Повторный запуск ставит новую версию:
 
 ```bash
-docker compose exec server npx -y @haiiro/install@latest docuflow
+npx -y @haiiro/docuflow install --url https://crm.example.ru --api-key <ключ>
 ```
 
-Ключи не нужны: установщик работает внутри контейнера сервера и вызывает его команды
-`marketplace:catalog-sync`, `application:install` и `application:upgrade`. Приложение ставится
-во все компании сервера. Конкретная версия: `docuflow@0.0.6`. Публикация из репозитория форка:
-`bash scripts/smb-publish.sh docflow`.
+Установщик загружает в CRM опубликованный архив этой версии пакета и устанавливает приложение
+(как `twenty app:install`), доступ к серверу и его настройки не нужны. Конкретная версия:
+`--version 0.0.8`.
 
-Из исходников (для разработки): `yarn install && yarn app remote:add --url … --api-key … --as prod && yarn app apply --remote prod`.
+Из исходников (для разработки): `node scripts/reinstall.mjs docuflow --local` в корне репозитория
+(нужны `CRM_URL` и `CRM_API_KEY` в `.env`).
 
 Затем в «Настройки → Приложения → Документооборот» заполнить переменные:
 
