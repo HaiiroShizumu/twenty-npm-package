@@ -184,10 +184,11 @@ export const SAVE_STEP_SETTINGS_LOGIC_FUNCTION_UNIVERSAL_IDENTIFIER =
   '13952f55-e84f-4d3a-a5a2-f3d68d78ba5e';
 export const PROCESS_STEPS_FRONT_COMPONENT_UNIVERSAL_IDENTIFIER =
   '839b8f10-d269-4005-a13a-0838610747b9';
-export const WORKFLOW_RECORD_STEPS_TAB_UNIVERSAL_IDENTIFIER =
-  '6b031481-d834-4af2-a1ef-a10717b5289b';
-export const WORKFLOW_RECORD_STEPS_WIDGET_UNIVERSAL_IDENTIFIER =
-  'e7d95558-abb4-46af-aae9-20dade718fc5';
+// Until 0.0.6 a tab of the workflow page ('6b031481-…' with widget
+// 'e7d95558-…'): the workflow editor showed it as a permanent column next to
+// the canvas. Those identifiers stay retired.
+export const WORKFLOW_STEPS_COMMAND_MENU_ITEM_UNIVERSAL_IDENTIFIER =
+  'c3f5a2d4-7e1b-4c9a-8f36-2b5d0e7a91c4';
 
 // Запуск с параметрами: поля параметров у процесса и шаг, который отдаёт их
 // следующим шагам переменными.

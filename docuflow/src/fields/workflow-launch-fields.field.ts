@@ -7,7 +7,7 @@ import {
 import { WORKFLOW_LAUNCH_FIELDS_UNIVERSAL_IDENTIFIER } from 'src/universal-identifiers';
 
 // Поля, которые человек заполняет перед запуском процесса, в формате шага
-// «Человеческий ввод». Правятся конструктором на вкладке процесса.
+// «Человеческий ввод». Правятся конструктором в команде процесса «Запуск и задания».
 export default defineField({
   universalIdentifier: WORKFLOW_LAUNCH_FIELDS_UNIVERSAL_IDENTIFIER,
   objectUniversalIdentifier:
