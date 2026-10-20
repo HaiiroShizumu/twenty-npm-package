@@ -1,0 +1,9 @@
+{
+  "name": "twenty-npm-package",
+  "private": true,
+  "description": "Скрипты для трёх самостоятельных проектов: установка в CRM и публикация в npm",
+  "scripts": {
+    "reinstall": "node scripts/reinstall.mjs",
+    "release": "node scripts/publish.mjs"
+  }
+}

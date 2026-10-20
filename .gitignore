@@ -3,3 +3,8 @@ dist
 .publish
 .twenty
 .yarn/install-state.gz
+
+# local
+.env
+.backup
+.publish

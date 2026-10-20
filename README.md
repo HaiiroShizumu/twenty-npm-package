@@ -30,3 +30,19 @@ yarn twenty app:publish
 ```
 
 Подробности — в README каждой папки.
+
+## Установка в CRM и выпуск
+
+Настройки — в `.env` (образец `.env.example`, сам файл в git не попадает): `CRM_URL`, `CRM_API_KEY`
+(ключ API CRM), `NPM_TOKEN`, `TWENTY_CONTAINER` или `TWENTY_FRONT_DIR` для скина.
+
+```bash
+node scripts/reinstall.mjs --local           # собрать из этих исходников и поставить в CRM (версия x.y.z-dev.<время>)
+node scripts/reinstall.mjs                   # поставить последние версии из npm
+node scripts/reinstall.mjs docuflow --clean  # сначала удалить приложение из CRM (данные тоже)
+node scripts/publish.mjs --dry-run           # проверки, сборка, состав пакетов без публикации
+node scripts/publish.mjs docuflow            # опубликовать в npm, версия +patch (--bump minor|major|x.y.z)
+```
+
+Порядок работы: правка исходников → `reinstall --local` и проверка в CRM → коммит → `publish.mjs`
+→ коммит с новыми версиями. В npm уходит только собранное из этого репозитория.
