@@ -1,6 +1,6 @@
 {
   "name": "@haiiro/docuflow",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "NorDiv Документооборот: задания с полями, процессы с запуском по параметрам, документы со всех записей, приложение Битрикс24",
   "license": "AGPL-3.0-only",
   "publishConfig": {

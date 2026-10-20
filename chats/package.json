@@ -1,6 +1,6 @@
 {
   "name": "@haiiro/chats",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "NorDiv Чаты: личные и групповые беседы, чаты записей, задач и процессов",
   "license": "AGPL-3.0-only",
   "publishConfig": {
