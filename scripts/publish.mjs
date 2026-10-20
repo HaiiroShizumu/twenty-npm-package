@@ -147,8 +147,30 @@ try {
   rmSync(npmConfigDir, { recursive: true, force: true });
 }
 
+// A fresh version can stay 404 in the registry for a couple of minutes, while
+// "latest" still points at the previous one: installing right away would put
+// the old version back.
+const waitForRegistry = async (name, version) => {
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const response = await fetch(`https://registry.npmjs.org/${name}/latest?t=${Date.now()}`, {
+      headers: { 'cache-control': 'no-cache' },
+    }).catch(() => null);
+
+    if (response?.ok && (await response.json()).version === version) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 15000));
+  }
+
+  fail(`${name}@${version} не появился в npm за 10 минут, установите позже: yarn reinstall`);
+};
+
 if (options.install && published.length > 0) {
-  // The registry may serve the previous "latest" for a few seconds
-  await new Promise((resolve) => setTimeout(resolve, 5000));
+  for (const key of published) {
+    step(`жду ${PACKAGES[key].name}@${readPackageJson(key).version} в реестре npm`);
+    await waitForRegistry(PACKAGES[key].name, readPackageJson(key).version);
+  }
+
   run('node', [join(ROOT, 'scripts/reinstall.mjs'), ...published]);
 }
