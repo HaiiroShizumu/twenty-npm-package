@@ -4,12 +4,16 @@ import {
   SystemPermissionFlag,
 } from 'twenty-sdk/define';
 
-import { DOCUMENT_OBJECT_UNIVERSAL_IDENTIFIER } from 'src/universal-identifiers';
+import {
+  DOCUMENT_FOLDER_OBJECT_UNIVERSAL_IDENTIFIER,
+  DOCUMENT_OBJECT_UNIVERSAL_IDENTIFIER,
+} from 'src/universal-identifiers';
 
-// "Удалить" on the docflow pages: documents, tasks and processes go to the
+// "Удалить" on the docflow pages: documents, folders, tasks and processes go to the
 // Twenty trash (restorable); nothing is destroyed for good.
 const SOFT_DELETABLE_OBJECT_UNIVERSAL_IDENTIFIERS = [
   DOCUMENT_OBJECT_UNIVERSAL_IDENTIFIER,
+  DOCUMENT_FOLDER_OBJECT_UNIVERSAL_IDENTIFIER,
   STANDARD_OBJECT_UNIVERSAL_IDENTIFIERS.task.universalIdentifier,
   STANDARD_OBJECT_UNIVERSAL_IDENTIFIERS.workflow.universalIdentifier,
 ];

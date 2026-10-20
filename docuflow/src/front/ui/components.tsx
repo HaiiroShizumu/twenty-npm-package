@@ -1,5 +1,7 @@
 import { type CSSProperties, type ReactNode, useId, useState } from 'react';
-import { Button } from 'twenty-ui/primitives/input';
+import { IconArrowDown, IconArrowUp } from 'twenty-ui/icon';
+
+import { ActionsMenu, Button, type MenuAction } from 'src/front/ui/kit';
 import { useTheme } from 'twenty-ui/theme';
 
 // Every style is inline: the host drops <style> elements of front components,
@@ -290,58 +292,40 @@ export const VariableChip = ({ children }: { children: ReactNode }) => {
   );
 };
 
-export type TableColumn = { key: string; label: string; width?: string };
-
-// "Удалить" at the end of a row: the first click asks, the second deletes
-const DeleteRowButton = ({ onDelete }: { onDelete: () => Promise<void> }) => {
-  const theme = useTheme();
-  const [isConfirming, setIsConfirming] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  return (
-    <span
-      onMouseLeave={() => setIsConfirming(false)}
-      style={{ display: 'inline-flex', justifyContent: 'flex-end', width: '100%' }}
-    >
-      <Button
-        variant="ghost"
-        size="sm"
-        loading={isDeleting}
-        onClick={() => {
-          if (!isConfirming) {
-            setIsConfirming(true);
-
-            return;
-          }
-
-          setIsDeleting(true);
-          void onDelete().finally(() => {
-            setIsDeleting(false);
-            setIsConfirming(false);
-          });
-        }}
-      >
-        <span style={{ color: isConfirming ? theme.color.red : theme.font.color.tertiary }}>
-          {isConfirming ? 'Удалить?' : 'Удалить'}
-        </span>
-      </Button>
-    </span>
-  );
+export type TableColumn = {
+  key: string;
+  label: string;
+  width?: string;
+  // The field the server sorts by when the header is clicked
+  sortKey?: string;
 };
+
+export type TableSort = { key: string; direction: 'asc' | 'desc' };
+
+// Ascending first, then descending, then back
+export const nextTableSort = (current: TableSort | undefined, key: string): TableSort =>
+  current?.key === key && current.direction === 'asc' ? { key, direction: 'desc' } : { key, direction: 'asc' };
+
+export const toRestOrderBy = (sort: TableSort) =>
+  `${sort.key}[${sort.direction === 'asc' ? 'AscNullsLast' : 'DescNullsLast'}]`;
 
 export const DataTable = ({
   columns,
   rows,
   selectedRowId,
   onRowClick,
-  onDeleteRow,
+  sort,
+  onSortChange,
+  rowActions,
 }: {
   columns: TableColumn[];
   rows: { id: string; cells: Record<string, ReactNode> }[];
   selectedRowId?: string;
   onRowClick: (rowId: string) => void;
-  // Shown on the hovered or selected row; the list reloads itself after it
-  onDeleteRow?: (rowId: string) => Promise<void>;
+  sort?: TableSort;
+  onSortChange?: (sort: TableSort) => void;
+  // The "⋯" of a row
+  rowActions?: (rowId: string) => MenuAction[];
 }) => {
   const theme = useTheme();
   const [hoveredRowId, setHoveredRowId] = useState<string | undefined>();
@@ -353,6 +337,10 @@ export const DataTable = ({
     whiteSpace: 'nowrap',
   };
   const rowRadius = theme.border.radius.sm;
+  const hasActions = rowActions !== undefined;
+
+  const rowBackground = (isSelected: boolean, isHovered: boolean) =>
+    isSelected ? theme.background.transparent.light : isHovered ? theme.background.transparent.lighter : 'transparent';
 
   // Quiet by design: faint dividers, the first column in the main color and
   // the rest muted, a soft highlight instead of lines around rows.
@@ -361,30 +349,49 @@ export const DataTable = ({
       <table style={{ borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed', width: '100%' }}>
         <thead>
           <tr>
-            {columns.map((column) => (
-              <th
-                key={column.key}
-                scope="col"
-                style={{
-                  ...cellStyle,
-                  color: theme.font.color.light,
-                  fontSize: theme.font.size.sm,
-                  fontWeight: theme.font.weight.regular,
-                  paddingBottom: theme.spacing[2],
-                  paddingTop: theme.spacing[2],
-                  width: column.width,
-                }}
-              >
-                {column.label}
-              </th>
-            ))}
-            {onDeleteRow !== undefined && <th scope="col" aria-label="Действия" style={{ ...cellStyle, width: '120px' }} />}
+            {columns.map((column) => {
+              const isSortable = column.sortKey !== undefined && onSortChange !== undefined;
+              const isSorted = isSortable && sort?.key === column.sortKey;
+              const SortIcon = sort?.direction === 'desc' ? IconArrowDown : IconArrowUp;
+
+              return (
+                <th
+                  key={column.key}
+                  scope="col"
+                  aria-sort={isSorted ? (sort?.direction === 'asc' ? 'ascending' : 'descending') : undefined}
+                  onClick={() => {
+                    if (isSortable && column.sortKey !== undefined) {
+                      onSortChange?.(nextTableSort(sort, column.sortKey));
+                    }
+                  }}
+                  style={{
+                    ...cellStyle,
+                    color: isSorted ? theme.font.color.secondary : theme.font.color.light,
+                    cursor: isSortable ? 'pointer' : 'default',
+                    fontSize: theme.font.size.sm,
+                    fontWeight: theme.font.weight.regular,
+                    paddingBottom: theme.spacing[2],
+                    paddingTop: theme.spacing[2],
+                    userSelect: 'none',
+                    width: column.width,
+                  }}
+                >
+                  <span style={{ alignItems: 'center', display: 'inline-flex', gap: theme.spacing[1] }}>
+                    {column.label}
+                    {isSorted && <SortIcon size={theme.icon.size.sm} stroke={theme.icon.stroke.sm} />}
+                  </span>
+                </th>
+              );
+            })}
+            {hasActions && <th scope="col" aria-label="Действия" style={{ ...cellStyle, width: '44px' }} />}
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => {
             const isSelected = row.id === selectedRowId;
             const isHovered = row.id === hoveredRowId;
+            const background = rowBackground(isSelected, isHovered);
+            const divider = `1px solid ${isSelected || isHovered ? 'transparent' : theme.background.transparent.lighter}`;
 
             return (
               <tr
@@ -401,47 +408,41 @@ export const DataTable = ({
                 style={{ cursor: 'pointer' }}
               >
                 {columns.map((column, index) => (
-                  // The click is on the data cells, not the row: the delete
-                  // button sits in the same row, and the sandbox does not
-                  // stop propagation reliably.
+                  // The click is on the data cells, not the row: the "⋯" sits
+                  // in the same row, and the sandbox does not stop propagation
+                  // reliably.
                   <td
                     key={column.key}
                     onClick={() => onRowClick(row.id)}
                     style={{
                       ...cellStyle,
-                      background: isSelected
-                        ? theme.background.transparent.light
-                        : isHovered
-                          ? theme.background.transparent.lighter
-                          : 'transparent',
-                      borderTop: `1px solid ${isSelected || isHovered ? 'transparent' : theme.background.transparent.lighter}`,
+                      background,
+                      borderTop: divider,
                       borderBottomLeftRadius: index === 0 ? rowRadius : 0,
-                      borderBottomRightRadius: index === columns.length - 1 && onDeleteRow === undefined ? rowRadius : 0,
+                      borderBottomRightRadius: index === columns.length - 1 && !hasActions ? rowRadius : 0,
                       borderTopLeftRadius: index === 0 ? rowRadius : 0,
-                      borderTopRightRadius: index === columns.length - 1 && onDeleteRow === undefined ? rowRadius : 0,
+                      borderTopRightRadius: index === columns.length - 1 && !hasActions ? rowRadius : 0,
                       color: index === 0 ? theme.font.color.primary : theme.font.color.secondary,
                     }}
                   >
                     {row.cells[column.key]}
                   </td>
                 ))}
-                {onDeleteRow !== undefined && (
+                {hasActions && (
                   <td
                     style={{
                       ...cellStyle,
-                      background: isSelected
-                        ? theme.background.transparent.light
-                        : isHovered
-                          ? theme.background.transparent.lighter
-                          : 'transparent',
+                      background,
                       borderBottomRightRadius: rowRadius,
-                      borderTop: `1px solid ${isSelected || isHovered ? 'transparent' : theme.background.transparent.lighter}`,
+                      borderTop: divider,
                       borderTopRightRadius: rowRadius,
+                      overflow: 'visible',
                       paddingBottom: 0,
                       paddingTop: 0,
+                      textAlign: 'right',
                     }}
                   >
-                    {(isHovered || isSelected) && <DeleteRowButton onDelete={() => onDeleteRow(row.id)} />}
+                    <ActionsMenu actions={rowActions(row.id)} />
                   </td>
                 )}
               </tr>

@@ -1,24 +1,23 @@
 import { useEffect, useMemo, useState } from 'react';
 import { defineFrontComponent } from 'twenty-sdk/define';
 import { AppPath, enqueueSnackbar, openSidePanelPage } from 'twenty-sdk/front-component';
-import { Button } from 'twenty-ui/primitives/input';
+import { IconExternalLink, IconFolderSymlink, IconPencil, IconRestore, IconTrash } from 'twenty-ui/icon';
 import { useTheme } from 'twenty-ui/theme';
 
-import { createRecord, deleteRecord, getErrorMessage, listRecords } from 'src/front/api';
-import {
-  DOCUMENT_TYPE_LABELS,
-  formatDate,
-} from 'src/front/format';
+import { createRecord, deleteRecord, getErrorMessage, listRecords, updateRecord } from 'src/front/api';
+import { DOCUMENT_TYPE_LABELS, formatDate } from 'src/front/format';
 import { useAsync, useDebouncedValue } from 'src/front/hooks/use-async';
 import { type DocflowDocument, type DocumentFolder } from 'src/front/types';
 import {
   DataTable,
   DocflowRoot,
   Message,
-  SelectField,
-  TextField,
+  type TableSort,
+  toRestOrderBy,
   Toolbar,
 } from 'src/front/ui/components';
+import { type FolderAppearance, FolderList } from 'src/front/ui/folders';
+import { Button, type MenuAction, PromptDialog, SearchWithFilters } from 'src/front/ui/kit';
 import { restAnd, restEq, restIlike, restIn, restIsNotNull, restOr } from 'src/shared/api/rest-filter.util';
 import { DOCUMENT_OBJECT_NAME, PAGE_SIZE } from 'src/shared/docflow.constants';
 import { logDocflow, logDocflowError } from 'src/shared/log.util';
@@ -26,12 +25,15 @@ import { DOCUMENTS_FRONT_COMPONENT_UNIVERSAL_IDENTIFIER } from 'src/universal-id
 
 const LIST_POLL_INTERVAL_MS = 3000;
 const LIST_POLL_DURATION_MS = 10 * 60 * 1000;
-
-type DocumentFilter = 'all' | 'collected' | 'DRAFT' | 'IN_REVIEW' | 'APPROVED' | 'ARCHIVED' | 'deleted';
-
 const SEARCH_DEBOUNCE_MS = 300;
 const FOLDERS_LIMIT = 500;
 const ALL_FOLDERS = '';
+const ANY = 'any';
+
+type DocumentFilters = { status: string; origin: string; scope: 'active' | 'deleted' };
+
+const DEFAULT_FILTERS: DocumentFilters = { status: ANY, origin: ANY, scope: 'active' };
+const DEFAULT_SORT: TableSort = { key: 'createdAt', direction: 'desc' };
 
 // The sandbox of a front component gets only the name and size of a chosen
 // file, never its content, so the file goes in through the standard "File"
@@ -56,22 +58,22 @@ const openDocumentCard = async (documentId: string) => {
 
 const buildFilter = ({
   folderId,
-  documentFilter,
+  filters,
   searchQuery,
 }: {
   folderId: string;
-  documentFilter: DocumentFilter;
+  filters: DocumentFilters;
   searchQuery: string;
 }) =>
   restAnd(
     folderId !== ALL_FOLDERS ? restEq('folderId', folderId) : undefined,
     // Deleted = in the Twenty trash, restored from the document's own card
-    documentFilter === 'deleted'
-      ? restIsNotNull('deletedAt')
-      : documentFilter === 'collected'
+    filters.scope === 'deleted' ? restIsNotNull('deletedAt') : undefined,
+    filters.status !== ANY ? restEq('status', filters.status) : undefined,
+    filters.origin === 'collected'
       ? restIn('origin', ['RECORD', 'PROCESS'])
-      : documentFilter !== 'all'
-        ? restEq('status', documentFilter)
+      : filters.origin === 'UPLOAD'
+        ? restEq('origin', 'UPLOAD')
         : undefined,
     searchQuery.trim().length > 0
       ? restOr(
@@ -87,11 +89,12 @@ const DocflowDocuments = () => {
   const [searchInput, setSearchInput] = useState('');
   const searchQuery = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS);
   const [folderId, setFolderId] = useState(ALL_FOLDERS);
-  const [documentFilter, setDocumentFilter] = useState<DocumentFilter>('all');
+  const [filters, setFilters] = useState<DocumentFilters>(DEFAULT_FILTERS);
+  const [sort, setSort] = useState<TableSort>(DEFAULT_SORT);
   const [openedDocumentId, setOpenedDocumentId] = useState<string | undefined>();
+  const [renamingDocument, setRenamingDocument] = useState<DocflowDocument | undefined>();
   const [watchStartedAt, setWatchStartedAt] = useState<number | undefined>();
   const [pages, setPages] = useState(1);
-  const [newFolderName, setNewFolderName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
 
   const { data: folders, reload: reloadFolders } = useAsync(
@@ -106,18 +109,25 @@ const DocflowDocuments = () => {
   );
   const listQuery = useMemo(
     () => ({
-      filter: buildFilter({ folderId, documentFilter, searchQuery }),
-      order_by: 'createdAt[DescNullsLast]',
+      filter: buildFilter({ folderId, filters, searchQuery }),
+      order_by: toRestOrderBy(sort),
       limit: PAGE_SIZE * pages,
       depth: 1,
     }),
-    [folderId, documentFilter, searchQuery, pages],
+    [folderId, filters, searchQuery, sort, pages],
   );
   const { data, setData, loading, error, reload } = useAsync(
     () => listRecords<DocflowDocument>('smbDocuments', listQuery),
     [listQuery],
   );
   const documents = data?.records ?? [];
+  const activeFilterCount =
+    (filters.status !== ANY ? 1 : 0) + (filters.origin !== ANY ? 1 : 0) + (filters.scope !== 'active' ? 1 : 0);
+
+  const changeFilters = (patch: Partial<DocumentFilters>) => {
+    setFilters((current) => ({ ...current, ...patch }));
+    setPages(1);
+  };
 
   // A document opens in its standard card in the side panel; while people
   // edit there, the list re-reads itself quietly to show the changes.
@@ -152,6 +162,9 @@ const DocflowDocuments = () => {
     };
   }, [watchStartedAt, listQuery, data]);
 
+  const notifyError = (actionError: unknown, fallback: string) =>
+    enqueueSnackbar({ message: getErrorMessage(actionError, fallback), variant: 'error' });
+
   // As "Создать" of a standard list: an empty draft in the open folder, filled
   // in its own card in the side panel (the file goes in there too).
   const handleCreateDocument = async () => {
@@ -174,12 +187,20 @@ const DocflowDocuments = () => {
       await openDocument(document.id);
     } catch (createError) {
       logDocflowError('documents: create failed', createError);
-      await enqueueSnackbar({
-        message: getErrorMessage(createError, 'Не удалось создать документ'),
-        variant: 'error',
-      });
+      await notifyError(createError, 'Не удалось создать документ');
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const handleUpdateDocument = async (documentId: string, patch: Record<string, unknown>, done: string) => {
+    try {
+      await updateRecord('smbDocuments', documentId, patch);
+      await enqueueSnackbar({ message: done, variant: 'success' });
+      await reload();
+    } catch (updateError) {
+      logDocflowError('documents: update failed', updateError, { documentId });
+      await notifyError(updateError, 'Не удалось изменить документ');
     }
   };
 
@@ -190,93 +211,167 @@ const DocflowDocuments = () => {
       await reload();
     } catch (deleteError) {
       logDocflowError('documents: delete failed', deleteError, { documentId });
-      await enqueueSnackbar({ message: getErrorMessage(deleteError, 'Не удалось удалить документ'), variant: 'error' });
+      await notifyError(deleteError, 'Не удалось удалить документ');
     }
   };
 
-  const handleCreateFolder = async () => {
-    const folderName = newFolderName.trim();
-
-    if (folderName.length === 0) {
-      return;
-    }
-
+  const handleCreateFolder = async (appearance: FolderAppearance) => {
     try {
-      await createRecord('smbDocumentFolders', {
-        name: folderName,
+      const folder = await createRecord<DocumentFolder>('smbDocumentFolders', {
+        ...appearance,
         parentFolderId: folderId === ALL_FOLDERS ? null : folderId,
       });
-      setNewFolderName('');
+
+      await reloadFolders();
+
+      if (folder !== undefined) {
+        setFolderId(folder.id);
+      }
+    } catch (folderError) {
+      await notifyError(folderError, 'Не удалось создать папку');
+    }
+  };
+
+  const handleUpdateFolder = async (id: string, appearance: FolderAppearance) => {
+    try {
+      await updateRecord('smbDocumentFolders', id, { ...appearance });
       await reloadFolders();
     } catch (folderError) {
-      await enqueueSnackbar({ message: getErrorMessage(folderError, 'Не удалось создать папку'), variant: 'error' });
+      await notifyError(folderError, 'Не удалось изменить папку');
     }
+  };
+
+  // The documents stay: they show under "Все документы"
+  const handleDeleteFolder = async (id: string) => {
+    try {
+      await deleteRecord('smbDocumentFolders', id);
+
+      if (folderId === id) {
+        setFolderId(ALL_FOLDERS);
+      }
+
+      await reloadFolders();
+      await enqueueSnackbar({ message: 'Папка удалена, документы остались в «Все документы»', variant: 'success' });
+    } catch (folderError) {
+      await notifyError(folderError, 'Не удалось удалить папку');
+    }
+  };
+
+  const documentActions = (documentId: string): MenuAction[] => {
+    const document = documents.find(({ id }) => id === documentId);
+
+    if (document === undefined) {
+      return [];
+    }
+
+    if (filters.scope === 'deleted') {
+      return [
+        { key: 'restore', label: 'Открыть и восстановить', icon: IconRestore, onSelect: () => void openDocument(documentId) },
+      ];
+    }
+
+    return [
+      { key: 'open', label: 'Открыть карточку', icon: IconExternalLink, onSelect: () => void openDocument(documentId) },
+      { key: 'rename', label: 'Переименовать', icon: IconPencil, onSelect: () => setRenamingDocument(document) },
+      ...(folders ?? [])
+        .filter((folder) => folder.id !== document.folderId)
+        .map((folder) => ({
+          key: `move-${folder.id}`,
+          label: `В папку «${folder.name?.trim() || 'Без названия'}»`,
+          icon: IconFolderSymlink,
+          onSelect: () =>
+            void handleUpdateDocument(documentId, { folderId: folder.id }, `Документ перемещён в «${folder.name ?? ''}»`),
+        })),
+      ...(typeof document.folderId === 'string' && document.folderId.length > 0
+        ? [
+            {
+              key: 'unfile',
+              label: 'Убрать из папки',
+              icon: IconFolderSymlink,
+              onSelect: () => void handleUpdateDocument(documentId, { folderId: null }, 'Документ убран из папки'),
+            },
+          ]
+        : []),
+      {
+        key: 'delete',
+        label: 'Удалить',
+        confirmLabel: 'Точно удалить?',
+        icon: IconTrash,
+        tone: 'danger' as const,
+        onSelect: () => void handleDeleteDocument(documentId),
+      },
+    ];
   };
 
   return (
     <DocflowRoot>
       <div style={{ display: 'flex', flex: 1, flexDirection: 'column', minHeight: 0, overflowY: 'auto' }}>
         <div style={{ display: 'flex', flex: 1, flexWrap: 'wrap', minHeight: 0 }}>
-          <nav
-            aria-label="Папки"
+          <div
             style={{
               boxSizing: 'border-box',
-              display: 'flex',
               flex: '1 1 200px',
-              flexDirection: 'column',
-              gap: theme.spacing[1],
               maxWidth: '240px',
               padding: `${theme.spacing[4]} ${theme.spacing[3]} ${theme.spacing[4]} ${theme.spacing[5]}`,
             }}
           >
-            {[{ id: ALL_FOLDERS, name: 'Все документы' }, ...(folders ?? [])].map((folder) => (
-              <Button
-                key={folder.id}
-                variant={folder.id === folderId ? 'solid' : 'ghost'}
-                size="sm"
-                fullWidth
-                onClick={() => {
-                  setFolderId(folder.id);
-                  setPages(1);
-                }}
-              >
-                {folder.name?.trim() || 'Без названия'}
-              </Button>
-            ))}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing[1], marginTop: theme.spacing[3] }}>
-              <TextField placeholder="Новая папка" value={newFolderName} onChange={setNewFolderName} />
-              <Button variant="outline" size="sm" disabled={newFolderName.trim().length === 0} onClick={() => void handleCreateFolder()}>
-                Создать папку
-              </Button>
-            </div>
-          </nav>
+            <FolderList
+              folders={folders ?? []}
+              selectedFolderId={folderId}
+              allFoldersId={ALL_FOLDERS}
+              onSelect={(id) => {
+                setFolderId(id);
+                setPages(1);
+              }}
+              onCreate={handleCreateFolder}
+              onUpdate={handleUpdateFolder}
+              onDelete={handleDeleteFolder}
+            />
+          </div>
           <div style={{ display: 'flex', flex: '999 1 420px', flexDirection: 'column', minWidth: 0 }}>
             <Toolbar>
-              <div style={{ flex: '0 1 240px' }}>
-                <TextField
-                  type="search"
-                  variant="bare"
-                  placeholder="Название или номер"
-                  value={searchInput}
-                  onChange={setSearchInput}
-                />
-              </div>
-              <SelectField<DocumentFilter>
-                variant="bare"
-                value={documentFilter}
-                options={[
-                  { value: 'all', label: 'Все документы' },
-                  { value: 'collected', label: 'Из записей и процессов' },
-                  { value: 'DRAFT', label: 'Черновики' },
-                  { value: 'IN_REVIEW', label: 'На согласовании' },
-                  { value: 'APPROVED', label: 'Согласованные' },
-                  { value: 'ARCHIVED', label: 'В архиве' },
-                  { value: 'deleted', label: 'Удалённые' },
+              <SearchWithFilters
+                value={searchInput}
+                onChange={setSearchInput}
+                placeholder="Название, номер, где загружен"
+                activeFilterCount={activeFilterCount}
+                onResetFilters={() => changeFilters(DEFAULT_FILTERS)}
+                filters={[
+                  {
+                    key: 'status',
+                    title: 'Статус',
+                    value: filters.status,
+                    options: [
+                      { value: ANY, label: 'Любой' },
+                      { value: 'DRAFT', label: 'Черновики' },
+                      { value: 'IN_REVIEW', label: 'На согласовании' },
+                      { value: 'APPROVED', label: 'Согласованные' },
+                      { value: 'ARCHIVED', label: 'В архиве' },
+                    ],
+                    onChange: (value) => changeFilters({ status: value }),
+                  },
+                  {
+                    key: 'origin',
+                    title: 'Откуда',
+                    value: filters.origin,
+                    options: [
+                      { value: ANY, label: 'Отовсюду' },
+                      { value: 'UPLOAD', label: 'Загружены в документы' },
+                      { value: 'collected', label: 'Из записей и процессов' },
+                    ],
+                    onChange: (value) => changeFilters({ origin: value }),
+                  },
+                  {
+                    key: 'scope',
+                    title: 'Корзина',
+                    value: filters.scope,
+                    options: [
+                      { value: 'active', label: 'Действующие' },
+                      { value: 'deleted', label: 'Удалённые' },
+                    ],
+                    onChange: (value) => changeFilters({ scope: value as DocumentFilters['scope'] }),
+                  },
                 ]}
-                onChange={(value) => {
-                  setDocumentFilter(value);
-                  setPages(1);
-                }}
               />
               <div style={{ marginLeft: 'auto' }}>
                 <Button variant="solid" size="sm" loading={isCreating} onClick={() => void handleCreateDocument()}>
@@ -294,15 +389,20 @@ const DocflowDocuments = () => {
             {documents.length > 0 && (
               <DataTable
                 columns={[
-                  { key: 'name', label: 'Название', width: '30%' },
-                  { key: 'type', label: 'Тип', width: '12%' },
-                  { key: 'number', label: 'Номер', width: '10%' },
-                  { key: 'source', label: 'Где загружен', width: '22%' },
-                  { key: 'createdAt', label: 'Добавлен' },
+                  { key: 'name', label: 'Название', width: '30%', sortKey: 'name' },
+                  { key: 'type', label: 'Тип', width: '14%', sortKey: 'documentType' },
+                  { key: 'number', label: 'Номер', width: '12%', sortKey: 'number' },
+                  { key: 'source', label: 'Где загружен', width: '24%', sortKey: 'sourceRecordName' },
+                  { key: 'createdAt', label: 'Добавлен', sortKey: 'createdAt' },
                 ]}
+                sort={sort}
+                onSortChange={(next) => {
+                  setSort(next);
+                  setPages(1);
+                }}
                 selectedRowId={openedDocumentId}
                 onRowClick={(documentId) => void openDocument(documentId)}
-                onDeleteRow={documentFilter === 'deleted' ? undefined : handleDeleteDocument}
+                rowActions={documentActions}
                 rows={documents.map((document) => ({
                   id: document.id,
                   cells: {
@@ -325,6 +425,18 @@ const DocflowDocuments = () => {
           </div>
         </div>
       </div>
+      {renamingDocument !== undefined && (
+        <PromptDialog
+          title="Переименовать документ"
+          label="Название"
+          initialValue={renamingDocument.name ?? ''}
+          onClose={() => setRenamingDocument(undefined)}
+          onSubmit={async (name) => {
+            await handleUpdateDocument(renamingDocument.id, { name }, 'Документ переименован');
+            setRenamingDocument(undefined);
+          }}
+        />
+      )}
     </DocflowRoot>
   );
 };

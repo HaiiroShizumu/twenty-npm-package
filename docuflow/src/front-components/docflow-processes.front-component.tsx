@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { defineFrontComponent } from 'twenty-sdk/define';
 import { AppPath, enqueueSnackbar, navigate } from 'twenty-sdk/front-component';
-import { Button } from 'twenty-ui/primitives/input';
+import { IconPencil, IconPlayerPlay, IconSettings, IconTrash } from 'twenty-ui/icon';
+import { Tag } from 'twenty-ui/primitives/data-display';
 import { useTheme } from 'twenty-ui/theme';
 
-import { callAppRoute, createRecord, deleteRecord, getErrorMessage, listRecords } from 'src/front/api';
+import { callAppRoute, createRecord, deleteRecord, getErrorMessage, listRecords, updateRecord } from 'src/front/api';
 import { useAsync, useDebouncedValue } from 'src/front/hooks/use-async';
-import { DataTable, DocflowRoot, Message, SplitView, TextField, Toolbar } from 'src/front/ui/components';
+import { DataTable, DocflowRoot, Message, SplitView, type TableSort, Toolbar } from 'src/front/ui/components';
+import { Button, PromptDialog, SearchWithFilters } from 'src/front/ui/kit';
 import { FormFieldInputs } from 'src/front/ui/form-field-inputs';
 import { restAnd, restEq, restIlike, restIn } from 'src/shared/api/rest-filter.util';
 import { DOCFLOW_SECTION } from 'src/shared/docflow.constants';
@@ -27,26 +29,34 @@ const SEARCH_DEBOUNCE_MS = 300;
 const DRAFT_WAIT_ATTEMPTS = 10;
 const DRAFT_WAIT_MS = 400;
 
-type Panel = { kind: 'closed' } | { kind: 'process'; workflowVersionId: string };
+type Panel = { kind: 'closed' } | { kind: 'process'; workflowId: string };
+type StatusFilter = 'all' | 'active' | 'draft';
 
 type WorkflowRecord = { id: string; name?: string | null; smbLaunchFields?: unknown };
 type WorkflowVersionRecord = {
   id: string;
   workflowId: string;
+  status?: string | null;
   trigger?: WorkflowTrigger | null;
   steps?: WorkflowStep[] | null;
 };
 
 type DocflowProcess = {
   workflowId: string;
-  workflowVersionId: string;
+  // The published version people launch; none while the process is a draft
+  workflowVersionId: string | undefined;
   name: string;
+  isPublished: boolean;
   launchFields: FormField[];
   stageNames: string[];
 };
 
-// Docflow processes are the standard workflows with the docflow section,
-// published, started by hand. Both lists are filtered by the server.
+const stageNamesOf = (version: WorkflowVersionRecord | undefined) =>
+  (version?.steps ?? []).filter((step) => !isLaunchParametersStep(step)).map((step) => step.name);
+
+// Docflow processes are the standard workflows with the docflow section:
+// published ones started by hand are launched here, drafts are shown to be
+// finished in the editor. Both lists are filtered by the server.
 const loadProcesses = async (searchQuery: string): Promise<DocflowProcess[]> => {
   const { records: workflows } = await listRecords<WorkflowRecord>('workflows', {
     filter: restAnd(
@@ -63,32 +73,31 @@ const loadProcesses = async (searchQuery: string): Promise<DocflowProcess[]> => 
 
   const { records: versions } = await listRecords<WorkflowVersionRecord>('workflowVersions', {
     filter: restAnd(
-      restEq('status', 'ACTIVE'),
+      restIn('status', ['ACTIVE', 'DRAFT']),
       restIn('workflowId', workflows.map(({ id }) => id)),
     ),
-    limit: PROCESSES_LIMIT,
+    limit: PROCESSES_LIMIT * 2,
   });
 
-  return workflows.flatMap((workflow) => {
-    const version = versions.find((candidate) => candidate.workflowId === workflow.id);
+  return workflows.map((workflow) => {
+    const active = versions.find(
+      (version) => version.workflowId === workflow.id && version.status === 'ACTIVE' && isLaunchableTrigger(version.trigger),
+    );
+    const draft = versions.find((version) => version.workflowId === workflow.id && version.status === 'DRAFT');
 
-    if (version === undefined || !isLaunchableTrigger(version.trigger)) {
-      return [];
-    }
-
-    return [
-      {
-        workflowId: workflow.id,
-        workflowVersionId: version.id,
-        name: workflow.name?.trim() || 'Без названия',
-        launchFields: parseLaunchFields(workflow.smbLaunchFields),
-        stageNames: (version.steps ?? [])
-          .filter((step) => !isLaunchParametersStep(step))
-          .map((step) => step.name),
-      },
-    ];
+    return {
+      workflowId: workflow.id,
+      workflowVersionId: active?.id,
+      name: workflow.name?.trim() || 'Без названия',
+      isPublished: active !== undefined,
+      launchFields: parseLaunchFields(workflow.smbLaunchFields),
+      stageNames: stageNamesOf(active ?? draft),
+    };
   });
 };
+
+const openEditor = (workflowId: string) =>
+  navigate(AppPath.RecordShowPage, { objectNameSingular: 'workflow', objectRecordId: workflowId });
 
 const ProcessLaunchForm = ({
   process,
@@ -117,7 +126,7 @@ const ProcessLaunchForm = ({
 
     try {
       await callAppRoute('/docflow/processes/launch', {
-        workflowVersionId: process.workflowVersionId,
+        workflowVersionId: process.workflowVersionId ?? '',
         values: parameters,
       });
       await enqueueSnackbar({ message: 'Процесс запущен', variant: 'success' });
@@ -128,6 +137,17 @@ const ProcessLaunchForm = ({
       setIsLaunching(false);
     }
   };
+
+  if (!process.isPublished) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing[3] }}>
+        <Message>Процесс ещё не опубликован: доделайте его в редакторе и нажмите «Активировать».</Message>
+        <Button variant="solid" size="md" fullWidth icon={IconSettings} onClick={() => void openEditor(process.workflowId)}>
+          Открыть редактор
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing[3] }}>
@@ -143,16 +163,7 @@ const ProcessLaunchForm = ({
       <Button variant="solid" size="md" fullWidth loading={isLaunching} onClick={() => void handleLaunch()}>
         Запустить
       </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() =>
-          void navigate(AppPath.RecordShowPage, {
-            objectNameSingular: 'workflow',
-            objectRecordId: process.workflowId,
-          })
-        }
-      >
+      <Button variant="ghost" size="sm" icon={IconSettings} onClick={() => void openEditor(process.workflowId)}>
         Изменить процесс
       </Button>
     </div>
@@ -180,31 +191,58 @@ const DocflowProcesses = () => {
   const theme = useTheme();
   const [searchInput, setSearchInput] = useState('');
   const searchQuery = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [sort, setSort] = useState<TableSort>({ key: 'name', direction: 'asc' });
   const [panel, setPanel] = useState<Panel>({ kind: 'closed' });
+  const [renaming, setRenaming] = useState<DocflowProcess | undefined>();
   const [isCreating, setIsCreating] = useState(false);
-  const { data: processes, loading, error, reload } = useAsync(() => loadProcesses(searchQuery), [searchQuery]);
-  const selectedVersionId = panel.kind === 'process' ? panel.workflowVersionId : undefined;
-  const selectedProcess = processes?.find((process) => process.workflowVersionId === selectedVersionId);
+  const { data: loaded, loading, error, reload } = useAsync(() => loadProcesses(searchQuery), [searchQuery]);
+  const selectedWorkflowId = panel.kind === 'process' ? panel.workflowId : undefined;
+  const selectedProcess = loaded?.find((process) => process.workflowId === selectedWorkflowId);
+
+  // The list is short: filtered and sorted here
+  const processes = (loaded ?? [])
+    .filter((process) =>
+      statusFilter === 'all' ? true : statusFilter === 'active' ? process.isPublished : !process.isPublished,
+    )
+    .sort((first, second) => {
+      const direction = sort.direction === 'asc' ? 1 : -1;
+
+      if (sort.key === 'parameters') {
+        return (first.launchFields.length - second.launchFields.length) * direction;
+      }
+
+      if (sort.key === 'status') {
+        return (Number(first.isPublished) - Number(second.isPublished)) * direction;
+      }
+
+      return first.name.localeCompare(second.name, 'ru') * direction;
+    });
 
   // The process goes to the Twenty trash ("Рабочие процессы → Удалённые"),
   // its runs and tasks stay.
-  const handleDeleteProcess = async (workflowVersionId: string) => {
-    const process = processes?.find((candidate) => candidate.workflowVersionId === workflowVersionId);
-
-    if (process === undefined) {
-      return;
-    }
-
+  const handleDeleteProcess = async (process: DocflowProcess) => {
     try {
       await deleteRecord('workflows', process.workflowId);
       setPanel((current) =>
-        current.kind === 'process' && current.workflowVersionId === workflowVersionId ? { kind: 'closed' } : current,
+        current.kind === 'process' && current.workflowId === process.workflowId ? { kind: 'closed' } : current,
       );
       await enqueueSnackbar({ message: `Процесс «${process.name}» удалён`, variant: 'success' });
       await reload();
     } catch (deleteError) {
       logDocflowError('process: delete failed', deleteError, { workflowId: process.workflowId });
       await enqueueSnackbar({ message: getErrorMessage(deleteError, 'Не удалось удалить процесс'), variant: 'error' });
+    }
+  };
+
+  const handleRenameProcess = async (process: DocflowProcess, name: string) => {
+    try {
+      await updateRecord('workflows', process.workflowId, { name });
+      await enqueueSnackbar({ message: 'Процесс переименован', variant: 'success' });
+      setRenaming(undefined);
+      await reload();
+    } catch (renameError) {
+      await enqueueSnackbar({ message: getErrorMessage(renameError, 'Не удалось переименовать процесс'), variant: 'error' });
     }
   };
 
@@ -250,7 +288,7 @@ const DocflowProcesses = () => {
         panel={
           selectedProcess !== undefined ? (
             <ProcessLaunchForm
-              key={selectedProcess.workflowVersionId}
+              key={selectedProcess.workflowId}
               process={selectedProcess}
               onLaunched={() => setPanel({ kind: 'closed' })}
             />
@@ -258,15 +296,26 @@ const DocflowProcesses = () => {
         }
       >
         <Toolbar>
-          <div style={{ flex: '0 1 240px' }}>
-            <TextField
-              type="search"
-              variant="bare"
-              placeholder="Поиск процессов"
-              value={searchInput}
-              onChange={setSearchInput}
-            />
-          </div>
+          <SearchWithFilters
+            value={searchInput}
+            onChange={setSearchInput}
+            placeholder="Поиск процессов"
+            activeFilterCount={statusFilter === 'all' ? 0 : 1}
+            onResetFilters={() => setStatusFilter('all')}
+            filters={[
+              {
+                key: 'status',
+                title: 'Статус',
+                value: statusFilter,
+                options: [
+                  { value: 'all', label: 'Все' },
+                  { value: 'active', label: 'Опубликованные' },
+                  { value: 'draft', label: 'Черновики' },
+                ],
+                onChange: (value) => setStatusFilter(value as StatusFilter),
+              },
+            ]}
+          />
           <div style={{ marginLeft: 'auto' }}>
             <Button variant="solid" size="sm" loading={isCreating} onClick={() => void handleCreate()}>
               Создать
@@ -278,29 +327,57 @@ const DocflowProcesses = () => {
             <Message tone="danger">{getErrorMessage(error, 'Не удалось загрузить процессы')}</Message>
           </div>
         )}
-        {loading && processes === undefined && <Message>Загрузка…</Message>}
-        {!loading && error === undefined && processes?.length === 0 && (
-          <Message>
-            Процессов для запуска нет. Здесь видны опубликованные процессы с ручным запуском и разделом «Документооборот». Параметры запуска задаются кнопкой «Параметры запуска» вверху процесса.
-          </Message>
+        {loading && loaded === undefined && <Message>Загрузка…</Message>}
+        {!loading && error === undefined && processes.length === 0 && (
+          <Message>Процессов нет. «Создать» добавит процесс в раздел «Документооборот».</Message>
         )}
-        {processes !== undefined && processes.length > 0 && (
+        {processes.length > 0 && (
           <DataTable
             columns={[
-              { key: 'name', label: 'Процесс', width: '40%' },
-              { key: 'parameters', label: 'Параметры', width: '18%' },
+              { key: 'name', label: 'Процесс', width: '36%', sortKey: 'name' },
+              { key: 'status', label: 'Статус', width: '18%', sortKey: 'status' },
+              { key: 'parameters', label: 'Параметры', width: '14%', sortKey: 'parameters' },
               { key: 'stages', label: 'Этапы' },
             ]}
-            selectedRowId={selectedVersionId}
-            onRowClick={(workflowVersionId) => setPanel({ kind: 'process', workflowVersionId })}
-            onDeleteRow={handleDeleteProcess}
+            sort={sort}
+            onSortChange={setSort}
+            selectedRowId={selectedWorkflowId}
+            onRowClick={(workflowId) => setPanel({ kind: 'process', workflowId })}
+            rowActions={(workflowId) => {
+              const process = processes.find((candidate) => candidate.workflowId === workflowId);
+
+              if (process === undefined) {
+                return [];
+              }
+
+              return [
+                ...(process.isPublished
+                  ? [{ key: 'launch', label: 'Запустить', icon: IconPlayerPlay, onSelect: () => setPanel({ kind: 'process', workflowId }) }]
+                  : []),
+                { key: 'edit', label: 'Открыть редактор', icon: IconSettings, onSelect: () => void openEditor(workflowId) },
+                { key: 'rename', label: 'Переименовать', icon: IconPencil, onSelect: () => setRenaming(process) },
+                {
+                  key: 'delete',
+                  label: 'Удалить',
+                  confirmLabel: 'Точно удалить?',
+                  icon: IconTrash,
+                  tone: 'danger' as const,
+                  onSelect: () => void handleDeleteProcess(process),
+                },
+              ];
+            }}
             rows={processes.map((process) => {
               const parameterCount = process.launchFields.length;
 
               return {
-                id: process.workflowVersionId,
+                id: process.workflowId,
                 cells: {
                   name: process.name,
+                  status: (
+                    <Tag color={process.isPublished ? 'green' : 'gray'}>
+                      {process.isPublished ? 'Опубликован' : 'Черновик'}
+                    </Tag>
+                  ),
                   parameters: parameterCount > 0 ? String(parameterCount) : 'нет',
                   stages: process.stageNames.join(' → '),
                 },
@@ -309,6 +386,15 @@ const DocflowProcesses = () => {
           />
         )}
       </SplitView>
+      {renaming !== undefined && (
+        <PromptDialog
+          title="Переименовать процесс"
+          label="Название"
+          initialValue={renaming.name}
+          onClose={() => setRenaming(undefined)}
+          onSubmit={(name) => handleRenameProcess(renaming, name)}
+        />
+      )}
     </DocflowRoot>
   );
 };

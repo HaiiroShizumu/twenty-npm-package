@@ -2,6 +2,7 @@ import { defineObject, FieldType } from 'twenty-sdk/define';
 
 import {
   DOCUMENT_FOLDER_COLOR_UNIVERSAL_IDENTIFIER,
+  DOCUMENT_FOLDER_ICON_UNIVERSAL_IDENTIFIER,
   DOCUMENT_FOLDER_NAME_UNIVERSAL_IDENTIFIER,
   DOCUMENT_FOLDER_OBJECT_UNIVERSAL_IDENTIFIER,
 } from 'src/universal-identifiers';
@@ -23,6 +24,16 @@ export default defineObject({
       label: 'Название',
       icon: 'IconAbc',
       name: 'name',
+    },
+    {
+      universalIdentifier: DOCUMENT_FOLDER_ICON_UNIVERSAL_IDENTIFIER,
+      type: FieldType.TEXT,
+      label: 'Значок',
+      icon: 'IconIcons',
+      name: 'icon',
+      description: 'Значок папки в документах, имя иконки Tabler (IconFolder, IconBriefcase…)',
+      isNullable: true,
+      defaultValue: null,
     },
     {
       universalIdentifier: DOCUMENT_FOLDER_COLOR_UNIVERSAL_IDENTIFIER,

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Button } from 'twenty-ui/primitives/input';
+import { Button } from 'src/front/ui/button';
 import { useTheme } from 'twenty-ui/theme';
 
 import { callMessenger, getErrorMessage } from 'src/front/api';

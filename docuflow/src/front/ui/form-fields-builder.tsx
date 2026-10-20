@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button } from 'twenty-ui/primitives/input';
+import { Button } from 'src/front/ui/kit';
 import { useTheme } from 'twenty-ui/theme';
 
 import { CheckboxField, Message, SelectField, TextField, VariableChip } from 'src/front/ui/components';

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { enqueueSnackbar } from 'twenty-sdk/front-component';
-import { Button } from 'twenty-ui/primitives/input';
+import { Button } from 'src/front/ui/kit';
 import { Tag } from 'twenty-ui/primitives/data-display';
 import { useTheme } from 'twenty-ui/theme';
 

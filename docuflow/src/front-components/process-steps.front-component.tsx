@@ -7,7 +7,7 @@ import {
   navigate,
   useSelectedRecordIds,
 } from 'twenty-sdk/front-component';
-import { Button } from 'twenty-ui/primitives/input';
+import { Button } from 'src/front/ui/kit';
 import { useTheme } from 'twenty-ui/theme';
 
 import { callAppRoute, getErrorMessage, getRecord, listRecords } from 'src/front/api';

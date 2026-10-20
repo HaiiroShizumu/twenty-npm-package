@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { defineFrontComponent } from 'twenty-sdk/define';
 import { AppPath, enqueueSnackbar, openSidePanelPage } from 'twenty-sdk/front-component';
-import { Button } from 'twenty-ui/primitives/input';
+import { IconExternalLink, IconEye, IconRestore, IconTrash } from 'twenty-ui/icon';
 import { Tag } from 'twenty-ui/primitives/data-display';
 import { useTheme } from 'twenty-ui/theme';
 
@@ -19,9 +19,12 @@ import {
   SplitView,
   TextAreaField,
   TextField,
+  type TableSort,
+  toRestOrderBy,
   Toolbar,
 } from 'src/front/ui/components';
 import { FormFieldsBuilder } from 'src/front/ui/form-fields-builder';
+import { Button, SearchWithFilters } from 'src/front/ui/kit';
 import { TaskWorkPanel } from 'src/front/ui/task-work-panel';
 import {
   restAnd,
@@ -39,23 +42,26 @@ import { getFormFieldsError } from 'src/shared/form/form-fields.util';
 import { TASKS_FRONT_COMPONENT_UNIVERSAL_IDENTIFIER } from 'src/universal-identifiers';
 
 type TaskFilter = 'open' | 'mine' | 'overdue' | 'done' | 'archived';
-type TaskSort = 'newest' | 'oldest' | 'dueSoon' | 'nameAsc';
 type Panel = { kind: 'closed' } | { kind: 'create' } | { kind: 'task'; taskId: string };
 
 const SEARCH_DEBOUNCE_MS = 300;
 const NO_ASSIGNEE = '';
 
-const ORDER_BY: Record<TaskSort, string> = {
-  newest: 'createdAt[DescNullsLast]',
-  oldest: 'createdAt[AscNullsLast]',
-  dueSoon: 'dueAt[AscNullsLast]',
-  nameAsc: 'title[AscNullsLast]',
-};
+const TASK_FILTER_OPTIONS: { value: TaskFilter; label: string }[] = [
+  { value: 'open', label: 'Открытые' },
+  { value: 'mine', label: 'Мои' },
+  { value: 'overdue', label: 'Просроченные' },
+  { value: 'done', label: 'Выполненные' },
+  { value: 'archived', label: 'Архив (удалённые)' },
+];
+
+const DEFAULT_SORT: TableSort = { key: 'createdAt', direction: 'desc' };
 
 const OPEN_FILTER = restOr(restNeq('status', TASK_DONE_STATUS), restIsNull('status'));
 
 // An archived task opens in its standard card: Twenty shows it as deleted
 // there and offers to restore it.
+// A task opens in its standard card too; a deleted one shows "Восстановить" there
 const openArchivedTask = (taskId: string) =>
   openSidePanelPage({
     to: AppPath.RecordShowPage,
@@ -184,7 +190,7 @@ const DocflowTasks = () => {
   const [searchInput, setSearchInput] = useState('');
   const searchQuery = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS);
   const [taskFilter, setTaskFilter] = useState<TaskFilter>('open');
-  const [sort, setSort] = useState<TaskSort>('newest');
+  const [sort, setSort] = useState<TableSort>(DEFAULT_SORT);
   const [panel, setPanel] = useState<Panel>({ kind: 'closed' });
   const [pages, setPages] = useState(1);
   // Fixed for the life of the list, so "overdue" does not refetch by itself.
@@ -194,7 +200,7 @@ const DocflowTasks = () => {
     () =>
       listRecords<DocflowTask>('tasks', {
         filter: buildFilter({ taskFilter, searchQuery, currentMemberId: currentMember?.id, now }),
-        order_by: ORDER_BY[sort],
+        order_by: toRestOrderBy(sort),
         limit: PAGE_SIZE * pages,
       }),
     [taskFilter, searchQuery, currentMember?.id, sort, pages, now],
@@ -233,43 +239,30 @@ const DocflowTasks = () => {
         }
       >
         <Toolbar>
-          <div style={{ flex: '0 1 240px' }}>
-            <TextField
-              type="search"
-              variant="bare"
-              placeholder="Поиск заданий"
-              value={searchInput}
-              onChange={setSearchInput}
-            />
-          </div>
-          <SelectField<TaskFilter>
-            variant="bare"
-            value={taskFilter}
-            options={[
-              { value: 'open', label: 'Открытые' },
-              { value: 'mine', label: 'Мои' },
-              { value: 'overdue', label: 'Просроченные' },
-              { value: 'done', label: 'Выполненные' },
-              { value: 'archived', label: 'Архив' },
-            ]}
-            onChange={(value) => {
-              setTaskFilter(value);
+          <SearchWithFilters
+            value={searchInput}
+            onChange={setSearchInput}
+            placeholder="Поиск заданий"
+            activeFilterCount={taskFilter === 'open' ? 0 : 1}
+            onResetFilters={() => {
+              setTaskFilter('open');
               setPages(1);
             }}
-          />
-          <SelectField<TaskSort>
-            variant="bare"
-            value={sort}
-            options={[
-              { value: 'newest', label: 'Сначала новые' },
-              { value: 'oldest', label: 'Сначала старые' },
-              { value: 'dueSoon', label: 'По сроку' },
-              { value: 'nameAsc', label: 'По названию' },
+            filters={[
+              {
+                key: 'tasks',
+                title: 'Показать',
+                value: taskFilter,
+                options: TASK_FILTER_OPTIONS,
+                onChange: (value) => {
+                  setTaskFilter(value as TaskFilter);
+                  setPages(1);
+                },
+              },
             ]}
-            onChange={setSort}
           />
           <div style={{ marginLeft: 'auto' }}>
-            <Button variant="outline" size="sm" onClick={() => setPanel({ kind: 'create' })}>
+            <Button variant="solid" size="sm" onClick={() => setPanel({ kind: 'create' })}>
               Создать
             </Button>
           </div>
@@ -284,13 +277,30 @@ const DocflowTasks = () => {
         {tasks.length > 0 && (
           <DataTable
             columns={[
-              { key: 'title', label: 'Задание', width: '34%' },
-              { key: 'assignee', label: 'Исполнитель', width: '20%' },
-              { key: 'dueAt', label: 'Срок', width: '14%' },
-              { key: 'status', label: 'Статус' },
+              { key: 'title', label: 'Задание', width: '38%', sortKey: 'title' },
+              { key: 'assignee', label: 'Исполнитель', width: '22%' },
+              { key: 'dueAt', label: 'Срок', width: '16%', sortKey: 'dueAt' },
+              { key: 'status', label: 'Статус', sortKey: 'status' },
             ]}
+            sort={sort}
+            onSortChange={setSort}
             selectedRowId={panel.kind === 'task' ? panel.taskId : undefined}
-            onDeleteRow={taskFilter === 'archived' ? undefined : handleDeleteTask}
+            rowActions={(taskId) =>
+              taskFilter === 'archived'
+                ? [{ key: 'open', label: 'Открыть и восстановить', icon: IconRestore, onSelect: () => void openArchivedTask(taskId) }]
+                : [
+                    { key: 'open', label: 'Открыть', icon: IconEye, onSelect: () => setPanel({ kind: 'task', taskId }) },
+                    { key: 'card', label: 'Карточка задачи', icon: IconExternalLink, onSelect: () => void openArchivedTask(taskId) },
+                    {
+                      key: 'delete',
+                      label: 'Удалить',
+                      confirmLabel: 'Точно удалить?',
+                      icon: IconTrash,
+                      tone: 'danger',
+                      onSelect: () => void handleDeleteTask(taskId),
+                    },
+                  ]
+            }
             onRowClick={(taskId) =>
               taskFilter === 'archived'
                 ? void openArchivedTask(taskId)

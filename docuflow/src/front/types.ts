@@ -45,5 +45,7 @@ export type DocflowDocument = {
 export type DocumentFolder = {
   id: string;
   name?: string | null;
+  color?: string | null;
+  icon?: string | null;
   parentFolderId?: string | null;
 };
