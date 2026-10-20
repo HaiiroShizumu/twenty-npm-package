@@ -1,7 +1,18 @@
 import {
   defineApplicationRole,
+  STANDARD_OBJECT_UNIVERSAL_IDENTIFIERS,
   SystemPermissionFlag,
 } from 'twenty-sdk/define';
+
+import { DOCUMENT_OBJECT_UNIVERSAL_IDENTIFIER } from 'src/universal-identifiers';
+
+// "Удалить" on the docflow pages: documents, tasks and processes go to the
+// Twenty trash (restorable); nothing is destroyed for good.
+const SOFT_DELETABLE_OBJECT_UNIVERSAL_IDENTIFIERS = [
+  DOCUMENT_OBJECT_UNIVERSAL_IDENTIFIER,
+  STANDARD_OBJECT_UNIVERSAL_IDENTIFIERS.task.universalIdentifier,
+  STANDARD_OBJECT_UNIVERSAL_IDENTIFIERS.workflow.universalIdentifier,
+];
 
 // What the app's functions may do when nobody is behind a run (record
 // events, the Bitrix24 portal): hand out process tasks, collect documents.
@@ -17,6 +28,13 @@ export default defineApplicationRole({
   canUpdateAllObjectRecords: true,
   canSoftDeleteAllObjectRecords: false,
   canDestroyAllObjectRecords: false,
+  objectPermissions: SOFT_DELETABLE_OBJECT_UNIVERSAL_IDENTIFIERS.map((objectUniversalIdentifier) => ({
+    objectUniversalIdentifier,
+    canReadObjectRecords: true,
+    canUpdateObjectRecords: true,
+    canSoftDeleteObjectRecords: true,
+    canDestroyObjectRecords: false,
+  })),
   // UPLOAD_FILE and DOWNLOAD_FILE: collecting a file into documents reads
   // the attachment's file and uploads the document's own copy. Without them
   // the copy silently never happens on a stock Twenty.

@@ -5,7 +5,7 @@ import { Button } from 'twenty-ui/primitives/input';
 import { Tag } from 'twenty-ui/primitives/data-display';
 import { useTheme } from 'twenty-ui/theme';
 
-import { createRecord, getErrorMessage, listRecords } from 'src/front/api';
+import { createRecord, deleteRecord, getErrorMessage, listRecords } from 'src/front/api';
 import { formatDate, formatMemberName, isOverdue, TASK_STATUS_LABELS } from 'src/front/format';
 import { useAsync, useDebouncedValue } from 'src/front/hooks/use-async';
 import { useWorkspaceMembers } from 'src/front/hooks/use-workspace-members';
@@ -199,6 +199,17 @@ const DocflowTasks = () => {
       }),
     [taskFilter, searchQuery, currentMember?.id, sort, pages, now],
   );
+
+  const handleDeleteTask = async (taskId: string) => {
+    try {
+      await deleteRecord('tasks', taskId);
+      setPanel((current) => (current.kind === 'task' && current.taskId === taskId ? { kind: 'closed' } : current));
+      await enqueueSnackbar({ message: 'Задание удалено: оно в фильтре «Архив»', variant: 'success' });
+      await reload();
+    } catch (deleteError) {
+      await enqueueSnackbar({ message: getErrorMessage(deleteError, 'Не удалось удалить задание'), variant: 'error' });
+    }
+  };
   const tasks = data?.records ?? [];
 
   return (
@@ -273,12 +284,13 @@ const DocflowTasks = () => {
         {tasks.length > 0 && (
           <DataTable
             columns={[
-              { key: 'title', label: 'Задание', width: '40%' },
-              { key: 'assignee', label: 'Исполнитель', width: '24%' },
-              { key: 'dueAt', label: 'Срок', width: '16%' },
+              { key: 'title', label: 'Задание', width: '34%' },
+              { key: 'assignee', label: 'Исполнитель', width: '20%' },
+              { key: 'dueAt', label: 'Срок', width: '14%' },
               { key: 'status', label: 'Статус' },
             ]}
             selectedRowId={panel.kind === 'task' ? panel.taskId : undefined}
+            onDeleteRow={taskFilter === 'archived' ? undefined : handleDeleteTask}
             onRowClick={(taskId) =>
               taskFilter === 'archived'
                 ? void openArchivedTask(taskId)

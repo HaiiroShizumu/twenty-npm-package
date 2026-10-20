@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { defineFrontComponent } from 'twenty-sdk/define';
-import { enqueueSnackbar, useSelectedRecordIds } from 'twenty-sdk/front-component';
+import {
+  AppPath,
+  closeSidePanel,
+  enqueueSnackbar,
+  navigate,
+  useSelectedRecordIds,
+} from 'twenty-sdk/front-component';
 import { Button } from 'twenty-ui/primitives/input';
 import { useTheme } from 'twenty-ui/theme';
 
@@ -35,6 +41,25 @@ type DraftVersion = { id: string; steps?: WorkflowStep[] | null };
 type ProcessRecord = { id: string; smbLaunchFields?: unknown };
 
 const sectionStyle = { display: 'flex', flexDirection: 'column' as const };
+
+// The workflow editor reads a version once when it opens and keeps it: it is
+// not told that the server changed the trigger, so the new parameters would
+// show up as variables only after a reload. Opening the process again (out
+// and back, without history entries) makes the editor read the draft afresh.
+const reopenWorkflowEditor = async (workflowId: string) => {
+  try {
+    await closeSidePanel();
+    await navigate(AppPath.RecordIndexPage, { objectNamePlural: 'workflows' }, undefined, { replace: true });
+    await navigate(
+      AppPath.RecordShowPage,
+      { objectNameSingular: 'workflow', objectRecordId: workflowId },
+      undefined,
+      { replace: true },
+    );
+  } catch (error) {
+    logDocflowError('process: editor not reopened', error, { workflowId });
+  }
+};
 
 const LaunchParametersEditor = ({
   workflowId,
@@ -75,6 +100,7 @@ const LaunchParametersEditor = ({
         variant: 'success',
       });
       onSaved();
+      await reopenWorkflowEditor(workflowId);
     } catch (error) {
       logDocflowError('process: save launch fields failed', error, { workflowId });
       setErrorMessage(getErrorMessage(error, 'Не удалось сохранить параметры'));

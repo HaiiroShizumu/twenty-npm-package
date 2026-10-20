@@ -27,6 +27,11 @@ export const updateRecord = async <TRecord>(
   data: Record<string, unknown>,
 ) => readRestRecord<TRecord>(await client.patch(`/rest/${namePlural}/${id}`, data));
 
+// Like "Удалить" in Twenty: the record goes to the trash and can be restored
+export const deleteRecord = async (namePlural: string, id: string) => {
+  await client.delete(`/rest/${namePlural}/${id}`, { query: { soft_delete: 'true' } });
+};
+
 export const callAppRoute = async <TResult>(path: string, body: Record<string, unknown>) => {
   try {
     return await client.post<TResult>(`/s${path}`, body);

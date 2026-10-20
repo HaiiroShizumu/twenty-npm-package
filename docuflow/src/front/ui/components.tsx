@@ -292,16 +292,56 @@ export const VariableChip = ({ children }: { children: ReactNode }) => {
 
 export type TableColumn = { key: string; label: string; width?: string };
 
+// "Удалить" at the end of a row: the first click asks, the second deletes
+const DeleteRowButton = ({ onDelete }: { onDelete: () => Promise<void> }) => {
+  const theme = useTheme();
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  return (
+    <span
+      onMouseLeave={() => setIsConfirming(false)}
+      style={{ display: 'inline-flex', justifyContent: 'flex-end', width: '100%' }}
+    >
+      <Button
+        variant="ghost"
+        size="sm"
+        loading={isDeleting}
+        onClick={() => {
+          if (!isConfirming) {
+            setIsConfirming(true);
+
+            return;
+          }
+
+          setIsDeleting(true);
+          void onDelete().finally(() => {
+            setIsDeleting(false);
+            setIsConfirming(false);
+          });
+        }}
+      >
+        <span style={{ color: isConfirming ? theme.color.red : theme.font.color.tertiary }}>
+          {isConfirming ? 'Удалить?' : 'Удалить'}
+        </span>
+      </Button>
+    </span>
+  );
+};
+
 export const DataTable = ({
   columns,
   rows,
   selectedRowId,
   onRowClick,
+  onDeleteRow,
 }: {
   columns: TableColumn[];
   rows: { id: string; cells: Record<string, ReactNode> }[];
   selectedRowId?: string;
   onRowClick: (rowId: string) => void;
+  // Shown on the hovered or selected row; the list reloads itself after it
+  onDeleteRow?: (rowId: string) => Promise<void>;
 }) => {
   const theme = useTheme();
   const [hoveredRowId, setHoveredRowId] = useState<string | undefined>();
@@ -338,6 +378,7 @@ export const DataTable = ({
                 {column.label}
               </th>
             ))}
+            {onDeleteRow !== undefined && <th scope="col" aria-label="Действия" style={{ ...cellStyle, width: '120px' }} />}
           </tr>
         </thead>
         <tbody>
@@ -350,7 +391,6 @@ export const DataTable = ({
                 key={row.id}
                 tabIndex={0}
                 aria-selected={isSelected}
-                onClick={() => onRowClick(row.id)}
                 onMouseEnter={() => setHoveredRowId(row.id)}
                 onMouseLeave={() => setHoveredRowId((current) => (current === row.id ? undefined : current))}
                 onKeyDown={(event) => {
@@ -361,8 +401,12 @@ export const DataTable = ({
                 style={{ cursor: 'pointer' }}
               >
                 {columns.map((column, index) => (
+                  // The click is on the data cells, not the row: the delete
+                  // button sits in the same row, and the sandbox does not
+                  // stop propagation reliably.
                   <td
                     key={column.key}
+                    onClick={() => onRowClick(row.id)}
                     style={{
                       ...cellStyle,
                       background: isSelected
@@ -372,15 +416,34 @@ export const DataTable = ({
                           : 'transparent',
                       borderTop: `1px solid ${isSelected || isHovered ? 'transparent' : theme.background.transparent.lighter}`,
                       borderBottomLeftRadius: index === 0 ? rowRadius : 0,
-                      borderBottomRightRadius: index === columns.length - 1 ? rowRadius : 0,
+                      borderBottomRightRadius: index === columns.length - 1 && onDeleteRow === undefined ? rowRadius : 0,
                       borderTopLeftRadius: index === 0 ? rowRadius : 0,
-                      borderTopRightRadius: index === columns.length - 1 ? rowRadius : 0,
+                      borderTopRightRadius: index === columns.length - 1 && onDeleteRow === undefined ? rowRadius : 0,
                       color: index === 0 ? theme.font.color.primary : theme.font.color.secondary,
                     }}
                   >
                     {row.cells[column.key]}
                   </td>
                 ))}
+                {onDeleteRow !== undefined && (
+                  <td
+                    style={{
+                      ...cellStyle,
+                      background: isSelected
+                        ? theme.background.transparent.light
+                        : isHovered
+                          ? theme.background.transparent.lighter
+                          : 'transparent',
+                      borderBottomRightRadius: rowRadius,
+                      borderTop: `1px solid ${isSelected || isHovered ? 'transparent' : theme.background.transparent.lighter}`,
+                      borderTopRightRadius: rowRadius,
+                      paddingBottom: 0,
+                      paddingTop: 0,
+                    }}
+                  >
+                    {(isHovered || isSelected) && <DeleteRowButton onDelete={() => onDeleteRow(row.id)} />}
+                  </td>
+                )}
               </tr>
             );
           })}

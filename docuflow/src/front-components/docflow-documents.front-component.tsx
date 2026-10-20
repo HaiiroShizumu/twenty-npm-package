@@ -4,7 +4,7 @@ import { AppPath, enqueueSnackbar, openSidePanelPage } from 'twenty-sdk/front-co
 import { Button } from 'twenty-ui/primitives/input';
 import { useTheme } from 'twenty-ui/theme';
 
-import { createRecord, getErrorMessage, listRecords } from 'src/front/api';
+import { createRecord, deleteRecord, getErrorMessage, listRecords } from 'src/front/api';
 import {
   DOCUMENT_TYPE_LABELS,
   formatDate,
@@ -19,7 +19,7 @@ import {
   TextField,
   Toolbar,
 } from 'src/front/ui/components';
-import { restAnd, restEq, restIlike, restIn, restOr } from 'src/shared/api/rest-filter.util';
+import { restAnd, restEq, restIlike, restIn, restIsNotNull, restOr } from 'src/shared/api/rest-filter.util';
 import { DOCUMENT_OBJECT_NAME, PAGE_SIZE } from 'src/shared/docflow.constants';
 import { logDocflow, logDocflowError } from 'src/shared/log.util';
 import { DOCUMENTS_FRONT_COMPONENT_UNIVERSAL_IDENTIFIER } from 'src/universal-identifiers';
@@ -27,7 +27,7 @@ import { DOCUMENTS_FRONT_COMPONENT_UNIVERSAL_IDENTIFIER } from 'src/universal-id
 const LIST_POLL_INTERVAL_MS = 3000;
 const LIST_POLL_DURATION_MS = 10 * 60 * 1000;
 
-type DocumentFilter = 'all' | 'collected' | 'DRAFT' | 'IN_REVIEW' | 'APPROVED' | 'ARCHIVED';
+type DocumentFilter = 'all' | 'collected' | 'DRAFT' | 'IN_REVIEW' | 'APPROVED' | 'ARCHIVED' | 'deleted';
 
 const SEARCH_DEBOUNCE_MS = 300;
 const FOLDERS_LIMIT = 500;
@@ -65,7 +65,10 @@ const buildFilter = ({
 }) =>
   restAnd(
     folderId !== ALL_FOLDERS ? restEq('folderId', folderId) : undefined,
-    documentFilter === 'collected'
+    // Deleted = in the Twenty trash, restored from the document's own card
+    documentFilter === 'deleted'
+      ? restIsNotNull('deletedAt')
+      : documentFilter === 'collected'
       ? restIn('origin', ['RECORD', 'PROCESS'])
       : documentFilter !== 'all'
         ? restEq('status', documentFilter)
@@ -180,6 +183,17 @@ const DocflowDocuments = () => {
     }
   };
 
+  const handleDeleteDocument = async (documentId: string) => {
+    try {
+      await deleteRecord('smbDocuments', documentId);
+      await enqueueSnackbar({ message: 'Документ удалён: он в фильтре «Удалённые»', variant: 'success' });
+      await reload();
+    } catch (deleteError) {
+      logDocflowError('documents: delete failed', deleteError, { documentId });
+      await enqueueSnackbar({ message: getErrorMessage(deleteError, 'Не удалось удалить документ'), variant: 'error' });
+    }
+  };
+
   const handleCreateFolder = async () => {
     const folderName = newFolderName.trim();
 
@@ -257,6 +271,7 @@ const DocflowDocuments = () => {
                   { value: 'IN_REVIEW', label: 'На согласовании' },
                   { value: 'APPROVED', label: 'Согласованные' },
                   { value: 'ARCHIVED', label: 'В архиве' },
+                  { value: 'deleted', label: 'Удалённые' },
                 ]}
                 onChange={(value) => {
                   setDocumentFilter(value);
@@ -279,14 +294,15 @@ const DocflowDocuments = () => {
             {documents.length > 0 && (
               <DataTable
                 columns={[
-                  { key: 'name', label: 'Название', width: '34%' },
-                  { key: 'type', label: 'Тип', width: '14%' },
-                  { key: 'number', label: 'Номер', width: '12%' },
-                  { key: 'source', label: 'Где загружен', width: '24%' },
+                  { key: 'name', label: 'Название', width: '30%' },
+                  { key: 'type', label: 'Тип', width: '12%' },
+                  { key: 'number', label: 'Номер', width: '10%' },
+                  { key: 'source', label: 'Где загружен', width: '22%' },
                   { key: 'createdAt', label: 'Добавлен' },
                 ]}
                 selectedRowId={openedDocumentId}
                 onRowClick={(documentId) => void openDocument(documentId)}
+                onDeleteRow={documentFilter === 'deleted' ? undefined : handleDeleteDocument}
                 rows={documents.map((document) => ({
                   id: document.id,
                   cells: {

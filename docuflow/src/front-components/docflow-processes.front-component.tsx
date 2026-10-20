@@ -4,7 +4,7 @@ import { AppPath, enqueueSnackbar, navigate } from 'twenty-sdk/front-component';
 import { Button } from 'twenty-ui/primitives/input';
 import { useTheme } from 'twenty-ui/theme';
 
-import { callAppRoute, createRecord, getErrorMessage, listRecords } from 'src/front/api';
+import { callAppRoute, createRecord, deleteRecord, getErrorMessage, listRecords } from 'src/front/api';
 import { useAsync, useDebouncedValue } from 'src/front/hooks/use-async';
 import { DataTable, DocflowRoot, Message, SplitView, TextField, Toolbar } from 'src/front/ui/components';
 import { FormFieldInputs } from 'src/front/ui/form-field-inputs';
@@ -182,9 +182,31 @@ const DocflowProcesses = () => {
   const searchQuery = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS);
   const [panel, setPanel] = useState<Panel>({ kind: 'closed' });
   const [isCreating, setIsCreating] = useState(false);
-  const { data: processes, loading, error } = useAsync(() => loadProcesses(searchQuery), [searchQuery]);
+  const { data: processes, loading, error, reload } = useAsync(() => loadProcesses(searchQuery), [searchQuery]);
   const selectedVersionId = panel.kind === 'process' ? panel.workflowVersionId : undefined;
   const selectedProcess = processes?.find((process) => process.workflowVersionId === selectedVersionId);
+
+  // The process goes to the Twenty trash ("Рабочие процессы → Удалённые"),
+  // its runs and tasks stay.
+  const handleDeleteProcess = async (workflowVersionId: string) => {
+    const process = processes?.find((candidate) => candidate.workflowVersionId === workflowVersionId);
+
+    if (process === undefined) {
+      return;
+    }
+
+    try {
+      await deleteRecord('workflows', process.workflowId);
+      setPanel((current) =>
+        current.kind === 'process' && current.workflowVersionId === workflowVersionId ? { kind: 'closed' } : current,
+      );
+      await enqueueSnackbar({ message: `Процесс «${process.name}» удалён`, variant: 'success' });
+      await reload();
+    } catch (deleteError) {
+      logDocflowError('process: delete failed', deleteError, { workflowId: process.workflowId });
+      await enqueueSnackbar({ message: getErrorMessage(deleteError, 'Не удалось удалить процесс'), variant: 'error' });
+    }
+  };
 
   // As "Создать" of the standard list: a process with a manual trigger in the
   // docflow section, opened in the editor. Launch parameters are set later
@@ -271,6 +293,7 @@ const DocflowProcesses = () => {
             ]}
             selectedRowId={selectedVersionId}
             onRowClick={(workflowVersionId) => setPanel({ kind: 'process', workflowVersionId })}
+            onDeleteRow={handleDeleteProcess}
             rows={processes.map((process) => {
               const parameterCount = process.launchFields.length;
 
