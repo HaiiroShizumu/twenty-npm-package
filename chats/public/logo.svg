@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" fill="none">
+  <rect width="80" height="80" rx="16" fill="#141414"/>
+  <g transform="translate(16 16) scale(0.5581)" fill="#FAFAFA">
+    <path d="M36 0 H36 A4 4 0 0 1 40 4 V36 A4 4 0 0 1 36 40 H4 A4 4 0 0 1 0 36 V36 A36 36 0 0 1 36 0 Z" fill-opacity="1"/>
+    <path d="M50 0 H50 A36 36 0 0 1 86 36 V36 A4 4 0 0 1 82 40 H50 A4 4 0 0 1 46 36 V4 A4 4 0 0 1 50 0 Z" fill-opacity="0.8"/>
+    <path d="M4 46 H36 A4 4 0 0 1 40 50 V82 A4 4 0 0 1 36 86 H4 A4 4 0 0 1 0 82 V50 A4 4 0 0 1 4 46 Z" fill-opacity="0.86"/>
+    <path d="M50 46 H82 A4 4 0 0 1 86 50 V50 A36 36 0 0 1 50 86 H50 A4 4 0 0 1 46 82 V50 A4 4 0 0 1 50 46 Z" fill-opacity="0.68"/>
+  </g>
+</svg>

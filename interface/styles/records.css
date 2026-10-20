@@ -1,0 +1,158 @@
+/*
+  SMB skin, record views. Keyed off hooks upstream already renders: the
+  record-table-* / record-board-* ids, data-record-board-column-id and the
+  table-cell / header-cell / footer-cell class names.
+
+  Cells paint a solid color resolved from the JS theme (inline custom
+  properties), so tokens alone can't reach them: they are cleared here and the
+  panel glass shows through. Sticky parts only switch to the opaque frost
+  while content actually scrolls beneath them, because per-cell
+  backdrop-filter breaks compositing in Chromium.
+*/
+
+/* ---------- Tables ---------- */
+
+html[data-skin='smb'] [id^='record-table-'] {
+  --smb-cell-base: transparent;
+  --smb-table-tint: color-mix(in srgb, var(--smb-fg) 3.5%, transparent);
+}
+
+html[data-skin='smb'] [id^='record-table-'] div.header-cell,
+html[data-skin='smb'] [id^='record-table-'] div.table-cell,
+html[data-skin='smb'] [id^='record-table-'] div.table-cell-0-0 {
+  background: var(--smb-cell-base);
+  border-right-color: transparent;
+}
+
+html[data-skin='smb'] [id^='record-table-'] div.table-cell,
+html[data-skin='smb'] [id^='record-table-'] div.table-cell-0-0 {
+  border-bottom-color: var(--smb-row-divider);
+}
+
+/* Header and footer rows: one tinted band instead of per-cell fills */
+html[data-skin='smb'] [id^='record-table-'] > div:has(> div.header-cell),
+html[data-skin='smb'] [id^='record-table-'] > div:has(> div.footer-cell) {
+  background: var(--smb-table-tint);
+}
+
+html[data-skin='smb'] [id^='record-table-'] div.header-cell > *,
+html[data-skin='smb'] [id^='record-table-'] div.footer-cell {
+  background: transparent;
+  border-right-color: transparent;
+}
+
+html[data-skin='smb']
+  [id^='record-table-']
+  div.header-cell
+  .record-table-cell-content {
+  color: var(--t-font-color-tertiary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Meta columns read muted; the label column keeps the primary tier */
+html[data-skin='smb']
+  [id^='record-table-']
+  div.table-cell:not(.record-table-column-field-0) {
+  --t-font-color-primary: var(--smb-fg-muted);
+}
+
+html[data-skin='smb']
+  [id^='record-table-']
+  div.table-cell.record-table-column-field-0
+  .record-table-cell-content {
+  font-weight: 600;
+}
+
+@container style(--record-table-vertical-scroll-visibility: visible) {
+  html[data-skin='smb'] [id^='record-table-'] > div:has(> div.header-cell) {
+    background: var(--smb-surface-frost);
+  }
+}
+
+html[data-skin='smb'] [id^='record-table-'] > div:has(> div.footer-cell) {
+  background: var(--smb-surface-frost);
+}
+
+@container style(--record-table-horizontal-scroll-visibility: visible) {
+  html[data-skin='smb']
+    [id^='record-table-']
+    div:is(.table-cell, .table-cell-0-0, .header-cell, .footer-cell):is(
+      .record-table-column-checkbox,
+      .record-table-column-drag-and-drop,
+      .record-table-column-field-0
+    ) {
+    --smb-cell-base: var(--smb-surface-frost);
+
+    background: var(--smb-cell-base);
+  }
+}
+
+/* Row states: a single tint across the row, no per-cell outlines */
+html[data-skin='smb']
+  [id^='record-table-']
+  [data-selectable-id]:hover
+  > div.table-cell {
+  background: color-mix(in srgb, var(--smb-fg) 4%, var(--smb-cell-base));
+}
+
+html[data-skin='smb']
+  [id^='record-table-']
+  [data-selectable-id]:is([data-focused='true'], [data-active='true'])
+  > div:is(.table-cell, .table-cell-0-0) {
+  background: color-mix(in srgb, var(--color-accent) 12%, var(--smb-cell-base));
+  border-color: transparent;
+  box-shadow: none;
+}
+
+/* Label/relation chips read as plain fields, not bordered pills */
+html[data-skin='smb'] [id^='record-table-'] [data-variant='soft'],
+html[data-skin='smb'] [id^='record-table-'] [data-variant='solid'] {
+  background: transparent;
+  padding-inline-start: 0;
+}
+
+html[data-skin='smb']
+  [id^='record-table-']
+  :is([data-variant='soft'], [data-variant='solid'])[data-clickable]:not(
+    [data-disabled]
+  ):hover {
+  background: color-mix(in srgb, var(--smb-fg) 6%, transparent);
+}
+
+/* ---------- Boards ---------- */
+
+/* Columns go clear so cards float on the panel glass */
+html[data-skin='smb'] [id^='record-board-'] [data-record-board-column-id] {
+  background: transparent;
+}
+
+/* Card = L2 surface. data-selected/data-focused/data-active are rendered by
+   upstream on the card's painted element */
+html[data-skin='smb'] [id^='record-board-card-'] [data-selected] {
+  background: var(--smb-surface-l2);
+  border-color: var(--smb-border-l2);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--smb-shadow-l2);
+}
+
+html[data-skin='smb'] [id^='record-board-card-'] [data-selected]:hover,
+html[data-skin='smb']
+  [id^='record-board-card-']
+  [data-selected][data-focused='true'] {
+  background: color-mix(in srgb, var(--smb-fg) 4%, var(--smb-surface-l2));
+  box-shadow: var(--smb-shadow-menu);
+}
+
+html[data-skin='smb']
+  [id^='record-board-card-']
+  [data-selected]:is([data-selected='true'], [data-active='true']) {
+  background: color-mix(
+    in srgb,
+    var(--color-accent) 10%,
+    var(--smb-surface-l2)
+  );
+  box-shadow: var(--smb-ring-selected), var(--smb-shadow-l2);
+}

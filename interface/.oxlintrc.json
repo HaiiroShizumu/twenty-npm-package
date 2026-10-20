@@ -1,0 +1,9 @@
+{
+  "plugins": ["typescript"],
+  "ignorePatterns": ["dist"],
+  "rules": {
+    "typescript/no-explicit-any": "error",
+    "typescript/consistent-type-imports": "error",
+    "no-unused-vars": "error"
+  }
+}

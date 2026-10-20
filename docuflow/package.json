@@ -1,0 +1,65 @@
+{
+  "name": "@haiiro/docuflow",
+  "version": "0.0.5",
+  "description": "NorDiv Документооборот: задания с полями, процессы с запуском по параметрам, документы со всех записей, приложение Битрикс24",
+  "license": "AGPL-3.0-only",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "files": [
+    "manifest.json",
+    "front-component-shared-dependencies.mjs",
+    "yarn.lock",
+    "src/**/*",
+    "public/**/*",
+    "README.md",
+    "tsconfig.json",
+    "tsconfig.spec.json",
+    "vitest.unit.config.ts",
+    ".oxlintrc.json",
+    ".nvmrc",
+    ".yarnrc.yml",
+    "!**/*.map",
+    "!**/__tests__/**"
+  ],
+  "engines": {
+    "node": "^24.5.0",
+    "npm": "please-use-yarn",
+    "yarn": ">=4.0.2"
+  },
+  "keywords": [
+    "twenty-app"
+  ],
+  "packageManager": "yarn@4.13.0",
+  "scripts": {
+    "twenty": "twenty",
+    "app": "twenty",
+    "build": "twenty dev:build",
+    "lint": "oxlint -c .oxlintrc.json .",
+    "lint:fix": "oxlint --fix -c .oxlintrc.json .",
+    "typecheck": "tsc --noEmit -p tsconfig.spec.json",
+    "test": "vitest run --config vitest.unit.config.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.7.2",
+    "@types/react": "^19.0.0",
+    "oxlint": "^0.16.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "twenty-client-sdk": "2.45.0",
+    "twenty-sdk": "2.45.0",
+    "twenty-ui": "2.45.0",
+    "typescript": "^5.9.3",
+    "vite-tsconfig-paths": "^4.2.1",
+    "vitest": "^4.0.0"
+  },
+  "frontComponentSharedDependencies": [
+    "react",
+    "react-dom/client",
+    "twenty-ui/primitives/input",
+    "twenty-ui/primitives/data-display",
+    "twenty-ui/theme",
+    "twenty-ui/icon"
+  ]
+}
