@@ -6,6 +6,7 @@ import { escapeHtml, parseBitrixGrant, parseBitrixRequest } from 'src/shared/bit
 import { getAttachmentTarget, getDocumentNameFromFile, readFileItems } from 'src/shared/documents/attachment-target.util';
 import { getDocflowEngine } from 'src/shared/engine';
 import { buildBitrixEntryUrl, buildDocflowPagePath } from 'src/shared/bitrix/bitrix-entry-url';
+import { renderBitrixRedirectPage } from 'src/server/bitrix-page';
 import { parseBitrixPerson } from 'src/server/bitrix-person';
 
 describe('REST helpers', () => {
@@ -104,6 +105,13 @@ describe('Bitrix24', () => {
         memberExists: true,
       }),
     ).toBe('https://acme.example.ru/page/layout-1');
+  });
+
+  it('answers the portal frame with an HTML redirect, not an empty body', () => {
+    const html = renderBitrixRedirectPage('https://acme.example.ru/page/layout-1');
+
+    expect(html).toContain('window.location.replace("https://acme.example.ru/page/layout-1")');
+    expect(html).toContain('href="https://acme.example.ru/page/layout-1"');
   });
 });
 

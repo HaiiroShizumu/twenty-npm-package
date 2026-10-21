@@ -4,9 +4,29 @@ const BX24_SDK_URL = 'https://api.bitrix24.com/api/v1/';
 
 export type BitrixPageTask = { title: string; url?: string; dueAt?: string };
 
-// The page shown inside the portal frame. It opens the CRM in a new browser
-// tab: a CRM session in a third-party frame depends on cookie rules the app
-// cannot change on a plain Twenty.
+// Bitrix loads the handler in an iframe via POST and expects HTML. An empty
+// HTTP 303 leaves a white frame: the CRM page is loaded with location.replace
+// after the portal is allowed in workspace.allowedIframeOrigins.
+export const renderBitrixRedirectPage = (url: string): string => `<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Документооборот</title>
+<meta http-equiv="refresh" content="0;url=${escapeHtml(url)}">
+<style>
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 24px; color: #333; background: #fff; }
+  a { color: #1961ed; }
+</style>
+</head>
+<body>
+<p>Открываем документооборот…</p>
+<p><a href="${escapeHtml(url)}">Продолжить</a></p>
+<script>window.location.replace(${JSON.stringify(url)});</script>
+</body>
+</html>`;
+
+// The page shown inside the portal frame for errors and install.
 export const renderBitrixPage = ({
   title,
   message,

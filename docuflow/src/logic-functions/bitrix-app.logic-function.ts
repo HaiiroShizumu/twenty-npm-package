@@ -13,8 +13,8 @@ import {
 } from 'src/server/bitrix-entry';
 import { parseBitrixPerson } from 'src/server/bitrix-person';
 import { proveAndLinkBitrixPortal } from 'src/server/bitrix-portal';
-import { renderBitrixPage } from 'src/server/bitrix-page';
-import { htmlResponse, redirectResponse } from 'src/server/http-response';
+import { renderBitrixPage, renderBitrixRedirectPage } from 'src/server/bitrix-page';
+import { htmlResponse } from 'src/server/http-response';
 import { BITRIX_APP_LOGIC_FUNCTION_UNIVERSAL_IDENTIFIER } from 'src/universal-identifiers';
 
 const configError = (message: string) =>
@@ -100,15 +100,17 @@ const handler = async (event: RoutePayload) => {
       await enrichWorkspaceMemberFromBitrix(member, person).catch(() => undefined);
     }
 
-    return redirectResponse(
-      buildBitrixEntryUrl({
-        crmUrl,
-        inviteHash,
-        pageLayoutId,
-        email: person.email,
-        memberExists: member !== undefined,
-      }),
-    );
+    const entryUrl = buildBitrixEntryUrl({
+      crmUrl,
+      inviteHash,
+      pageLayoutId,
+      email: person.email,
+      memberExists: member !== undefined,
+    });
+
+    // HTML+JS, not HTTP 303: Bitrix POSTs into an iframe and shows a blank
+    // frame when the handler answers with an empty redirect body.
+    return htmlResponse(200, renderBitrixRedirectPage(entryUrl));
   } catch (error) {
     return htmlResponse(
       403,
