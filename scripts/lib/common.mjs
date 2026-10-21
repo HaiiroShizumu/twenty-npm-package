@@ -271,6 +271,8 @@ export const uploadAndInstallApp = async (connection, { label, tarball, universa
     throw new Error(`хранилище файлов CRM не приняло архив (HTTP ${upload.status} ${await upload.text()})`);
   }
 
+  let skipTarball = false;
+
   try {
     await callMetadata(
       connection,
@@ -280,13 +282,31 @@ export const uploadAndInstallApp = async (connection, { label, tarball, universa
       { fileId: createFileUpload.fileId },
     );
   } catch (error) {
+    const message = `${error.message}`;
+
     // The CRM keeps every deployed archive, also after an uninstall: the
     // same version is installed from the copy it already has.
-    if (!/not higher than the currently deployed/i.test(error.message)) {
+    if (/not higher than the currently deployed/i.test(message)) {
+      console.log(`  версия ${version} уже загружена в CRM раньше, ставлю её`);
+    } else if (
+      // App came from the npm catalog: the server installs the same version
+      // from the registry, not from this archive.
+      /source channel|Cannot upload tarball|already claimed/i.test(message) ||
+      error.extensions?.code === 'SOURCE_CHANNEL_MISMATCH' ||
+      error.extensions?.subCode === 'SOURCE_CHANNEL_MISMATCH' ||
+      error.extensions?.subCode === 'UNIVERSAL_IDENTIFIER_ALREADY_CLAIMED'
+    ) {
+      console.log('  приложение из каталога npm — ставлю версию через каталог');
+      skipTarball = true;
+    } else {
       throw error;
     }
+  }
 
-    console.log(`  версия ${version} уже загружена в CRM раньше, ставлю её`);
+  if (skipTarball && /dev\./.test(version)) {
+    throw new Error(
+      `Локальная версия ${version} не ставится поверх приложения из npm. Сначала yarn release, затем yarn reinstall без --local`,
+    );
   }
 
   try {
