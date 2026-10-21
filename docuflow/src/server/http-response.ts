@@ -12,6 +12,12 @@ export const htmlResponse = (status: number, html: string) =>
     headers: { 'content-type': 'text/html; charset=utf-8' },
   });
 
+export const redirectResponse = (location: string, status = 303) =>
+  new Response(null, {
+    status,
+    headers: { location },
+  });
+
 export const readJsonBody = (body: unknown): Record<string, unknown> =>
   typeof body === 'object' && body !== null && !Array.isArray(body)
     ? (body as Record<string, unknown>)

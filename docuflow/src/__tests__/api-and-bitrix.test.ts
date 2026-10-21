@@ -5,6 +5,8 @@ import { readRestList, readRestRecord } from 'src/shared/api/rest-response.util'
 import { escapeHtml, parseBitrixGrant, parseBitrixRequest } from 'src/shared/bitrix/bitrix.util';
 import { getAttachmentTarget, getDocumentNameFromFile, readFileItems } from 'src/shared/documents/attachment-target.util';
 import { getDocflowEngine } from 'src/shared/engine';
+import { buildBitrixEntryUrl, buildDocflowPagePath } from 'src/shared/bitrix/bitrix-entry-url';
+import { parseBitrixPerson } from 'src/server/bitrix-person';
 
 describe('REST helpers', () => {
   it('builds filters the REST parser accepts and strips what breaks it', () => {
@@ -58,6 +60,50 @@ describe('Bitrix24', () => {
 
   it('escapes what goes into the portal page', () => {
     expect(escapeHtml('<b>"Акт"</b>')).toBe('&lt;b&gt;&quot;Акт&quot;&lt;/b&gt;');
+  });
+
+  it('reads the portal employee profile for CRM entry', () => {
+    expect(
+      parseBitrixPerson({
+        ID: 17,
+        EMAIL: 'Anna@Acme.RU',
+        NAME: 'Анна',
+        LAST_NAME: 'Петрова',
+        WORK_POSITION: 'Юрист',
+      }),
+    ).toEqual({
+      bitrixUserId: '17',
+      email: 'anna@acme.ru',
+      firstName: 'Анна',
+      lastName: 'Петрова',
+      jobTitle: 'Юрист',
+    });
+    expect(parseBitrixPerson({ ID: '1', EMAIL: 'not-an-email' })?.email).toBeUndefined();
+    expect(parseBitrixPerson({ EMAIL: 'a@b.ru' })).toBeUndefined();
+  });
+
+  it('sends new employees to the standard invite and members to the docflow page', () => {
+    expect(buildDocflowPagePath('layout-1')).toBe('/page/layout-1');
+    expect(
+      buildBitrixEntryUrl({
+        crmUrl: 'https://acme.example.ru',
+        inviteHash: 'inv-hash',
+        pageLayoutId: 'layout-1',
+        email: 'anna@acme.ru',
+        memberExists: false,
+      }),
+    ).toBe(
+      'https://acme.example.ru/invite/inv-hash?email=anna%40acme.ru&returnToPath=%2Fpage%2Flayout-1',
+    );
+    expect(
+      buildBitrixEntryUrl({
+        crmUrl: 'https://acme.example.ru',
+        inviteHash: 'inv-hash',
+        pageLayoutId: 'layout-1',
+        email: 'anna@acme.ru',
+        memberExists: true,
+      }),
+    ).toBe('https://acme.example.ru/page/layout-1');
   });
 });
 

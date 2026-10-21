@@ -5,6 +5,7 @@ import {
   BITRIX_CLIENT_SECRET_VARIABLE_UNIVERSAL_IDENTIFIER,
   CRM_PUBLIC_URL_VARIABLE_UNIVERSAL_IDENTIFIER,
   DOCFLOW_ENGINE_VARIABLE_UNIVERSAL_IDENTIFIER,
+  WORKSPACE_INVITE_HASH_VARIABLE_UNIVERSAL_IDENTIFIER,
 } from 'src/universal-identifiers';
 
 // The same identifier stands in the fork's module manifest
@@ -53,6 +54,13 @@ export default defineApplication({
       label: 'Битрикс24: ключ приложения (client_secret)',
       description: 'Из карточки локального приложения на портале.',
       isSecret: true,
+    },
+    WORKSPACE_INVITE_HASH: {
+      universalIdentifier: WORKSPACE_INVITE_HASH_VARIABLE_UNIVERSAL_IDENTIFIER,
+      label: 'Хеш приглашения в компанию',
+      description:
+        'Хвост ссылки «Пригласить» из настроек компании (…/invite/<этот-хвост>). Нужен, чтобы новый сотрудник из Битрикс24 попал на штатную регистрацию Twenty.',
+      isSecret: false,
     },
   },
 });
